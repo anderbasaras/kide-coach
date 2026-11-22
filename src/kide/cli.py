@@ -13,6 +13,7 @@ from pathlib import Path
 
 from kide.config import get_settings
 from kide.profile import ProfileError, load_profile
+from kide.storage.db import upgrade_database
 
 
 def _profile_check(args: argparse.Namespace) -> int:
@@ -31,6 +32,13 @@ def _profile_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def _db_upgrade(args: argparse.Namespace) -> int:
+    url = args.url or get_settings().database_url
+    upgrade_database(url)
+    print(f"OK: database at {url} is up to date")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="kide", description="Kide hybrid training coach.")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -40,6 +48,14 @@ def build_parser() -> argparse.ArgumentParser:
     check = profile_commands.add_parser("check", help="validate a profile YAML file")
     check.add_argument("path", nargs="?", help="defaults to PROFILE_PATH (./profile.yaml)")
     check.set_defaults(handler=_profile_check)
+
+    db = commands.add_parser("db", help="database tools")
+    db_commands = db.add_subparsers(dest="db_command", required=True)
+    upgrade = db_commands.add_parser(
+        "upgrade", help="create the database or apply pending migrations"
+    )
+    upgrade.add_argument("--url", help="defaults to DATABASE_URL ($DATA_DIR/kide.db)")
+    upgrade.set_defaults(handler=_db_upgrade)
 
     return parser
 

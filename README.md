@@ -62,6 +62,17 @@ uv run kide profile check
 Errors point to the line and field, e.g.
 `line 3 · identity.timezone: unknown time zone 'Europe/Madird'. Did you mean 'Europe/Madrid'?`
 
+## Database
+
+Kide stores your data in a local SQLite file (`$DATA_DIR/kide.db`, `./var/kide.db` by
+default). Create it, or bring it up to date after an upgrade, with:
+
+```bash
+uv run kide db upgrade
+```
+
+The schema is versioned with Alembic, so upgrades never require deleting your data.
+
 ## Development
 
 Requires [uv](https://docs.astral.sh/uv/) (it installs Python 3.12 for you if needed).
