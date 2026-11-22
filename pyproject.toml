@@ -1,0 +1,73 @@
+[project]
+name = "kide"
+version = "0.1.0.dev0"
+description = "Self-hosted hybrid training coach for Telegram: logs your box WODs and plans your gym sessions around them."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Ander Basaras Montalvo" }]
+requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Topic :: Communications :: Chat",
+]
+# Runtime dependencies are added phase by phase; each one is justified in DECISIONES.md.
+dependencies = [
+    "pydantic>=2.14,<3",          # profile schema and validation
+    "pydantic-settings>=2.16,<3", # typed settings from .env
+    "pyyaml>=6.0.4,<7",           # profile and locale files
+    "sqlalchemy>=2.1,<3",         # ORM over SQLite
+    "alembic>=1.20,<2",           # schema migrations
+    "tzdata>=2025.1; sys_platform == 'win32'", # zoneinfo has no tz database on Windows
+]
+
+[project.urls]
+Repository = "https://github.com/anderbasaras/kide-coach"
+
+[project.scripts]
+kide = "kide.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2,<10",
+    "ruff==0.17.6", # keep in sync with .pre-commit-config.yaml
+    "pre-commit>=4.7,<5",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kide"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",  # pycodestyle
+    "F",       # pyflakes
+    "I",       # isort
+    "N",       # pep8-naming
+    "UP",      # pyupgrade
+    "B",       # bugbear
+    "C4",      # comprehensions
+    "SIM",     # simplify
+    "PTH",     # pathlib over os.path
+    "RUF",     # ruff-specific
+    "ANN",     # type hints everywhere
+]
+ignore = ["ANN401"] # Any is sometimes the honest type (e.g. raw YAML)
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN"]                         # test functions don't need annotations
+"src/kide/storage/migrations/**" = ["ANN"]   # alembic-generated boilerplate
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config"]
