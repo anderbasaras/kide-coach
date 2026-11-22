@@ -49,6 +49,19 @@ kide-coach/
 User data (SQLite database, photos, exports) goes to `DATA_DIR` (`./var/` by default), which is
 git-ignored.
 
+## Your profile
+
+Everything Kide knows about you lives in `profile.yaml` (git-ignored). Start from the
+commented example and validate it:
+
+```bash
+cp profile.example.yaml profile.yaml
+uv run kide profile check
+```
+
+Errors point to the line and field, e.g.
+`line 3 · identity.timezone: unknown time zone 'Europe/Madird'. Did you mean 'Europe/Madrid'?`
+
 ## Development
 
 Requires [uv](https://docs.astral.sh/uv/) (it installs Python 3.12 for you if needed).

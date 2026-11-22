@@ -1,0 +1,294 @@
+# Kide profile — example
+#
+# Copy this file to `profile.yaml` (git-ignored) and make it yours, then check it:
+#     uv run kide profile check
+#
+# Example athlete: hypertrophy-focused gym rotation of 4 sessions, about 2 classes a
+# week at a functional fitness box, and a hybrid race in spring.
+#
+# Formats
+#   ranges    8, "6-8" or [6, 8]          (reps, RIR, rest seconds, weekly sets)
+#   times     always in quotes: "09:00"   (YAML reads an unquoted 9:00 as a number)
+#   dates     2027-04-17                  (past competitions also accept 2026 or 2026-10)
+#   ids       lowercase, digits and _     (upper_a, bench_press)
+# Unknown keys are errors, so a typo never goes unnoticed.
+
+schema_version: 1
+
+identity:
+  name: Sam
+  language: en              # bot and coach language: en, es
+  timezone: Europe/London   # IANA name: Europe/Madrid, America/New_York, ...
+
+body:                       # every field is optional
+  age: 30
+  sex: male                 # male | female | other
+  height_cm: 178
+  weight_kg: 80             # needed for exercises loaded with added_weight
+  body_fat_pct: null
+  waist_cm: null
+
+goals:
+  primary: hypertrophy      # hypertrophy | strength | hybrid_race | endurance | general
+  secondary: [strength, hybrid_race]
+  notes: Build muscle while staying lean.
+
+competitions:               # upcoming events
+  - name: City Hybrid Race
+    date: 2027-04-17
+    type: hybrid_race       # hybrid_race | functional_fitness | running | weightlifting | powerlifting | other
+    category: individual
+
+experience:
+  gym_years: 8
+  box_level: beginner       # none | beginner | intermediate | advanced
+  box_since: 2026-09
+  hybrid_race_level: beginner
+  past_competitions:
+    - name: Autumn Team Throwdown
+      when: 2026-10
+      type: functional_fitness
+      category: mixed pairs
+      result: 12th
+
+lifestyle:
+  sleep_hours: 7
+  daily_steps: 6000
+  steps_goal: 10000
+  job_activity: mixed       # sedentary | mixed | active | very_active
+  stress: moderate          # low | moderate | high
+
+schedule:
+  checkin_time: "09:00"     # daily "What's on today?" message, in identity.timezone
+  weekly_summary:
+    day: monday
+    time: "09:00"
+  gym_session_minutes: 75
+  gym_sessions_per_week: 3
+  box:
+    name: null              # optional
+    classes_per_week: 2
+    days: []                # empty = no fixed days
+    class_types: [functional_fitness, hybrid_race]
+
+# How weights are written down by default. Each exercise can override it with `loading`.
+weight_logging:
+  unit: kg
+  default_mode: per_side    # per_side | per_dumbbell | total | machine_stack | added_weight | bodyweight
+  includes_base_weight: false   # logged weights do not include the bar / machine start weight
+
+training:
+  # Defaults for every exercise. An exercise only writes what is different.
+  # `rir` is merged key by key; `loading` replaces the default as a whole.
+  defaults:
+    scheme: straight_sets   # straight_sets | top_set_backoff
+    warmup_sets: 0
+    sets: 3
+    reps: 10-12
+    rir:
+      sets: 1-2             # reps in reserve on every set but the last
+      last_set: 0           # last set to failure
+    load_increment_kg: 2.5
+    rest_seconds: 90-120
+
+  # Main lifts use "top set + back-offs":
+  #   warm-up sets -> 1 heavy top set -> back-off sets at (top-set total load - drop %).
+  # The engine (phase 4) computes back-off loads from this; nothing is calculated yet.
+
+  rotation:                 # done in order, whatever the weekday
+    - id: upper_a
+      name: Upper A
+      focus: upper          # upper | lower | full_body | other
+      exercises:
+        - id: bench_press
+          name: Barbell bench press
+          scheme: top_set_backoff
+          warmup_sets: 2
+          top_set_reps: 6-8
+          backoff_sets: 2
+          backoff_reps: 8-10
+          backoff_drop_pct: 10
+          rir: {top_set: 0-1, backoff: 1-2}
+          rest_seconds: 150-180
+          loading: {mode: per_side, base_weight_kg: 20}
+          current_load: {top_kg: 30, backoff_kg: 25}   # starting point until you log sessions
+        - id: weighted_pull_up
+          name: Weighted pull-up
+          scheme: top_set_backoff
+          warmup_sets: 1
+          top_set_reps: 6-8
+          backoff_sets: 2
+          backoff_reps: 8-10
+          backoff_drop_pct: 10
+          rir: {top_set: 0-1, backoff: 1-2}
+          load_increment_kg: 1.25
+          loading: {mode: added_weight}                # negative = assisted
+          current_load: {top_kg: 5, backoff_kg: 0}
+        - id: incline_db_press
+          name: Incline dumbbell press
+          reps: 8-10
+          load_increment_kg: 2
+          loading: {mode: per_dumbbell}
+        - id: seated_cable_row
+          name: Seated cable row
+          loading: {mode: machine_stack}
+        - id: cable_lateral_raise
+          name: Cable lateral raise
+          reps: 12-15
+          load_increment_kg: 1.25
+          superset: A
+          loading: {mode: machine_stack}
+        - id: triceps_pushdown
+          name: Triceps pushdown
+          superset: A
+          loading: {mode: machine_stack}
+
+    - id: lower_a
+      name: Lower A
+      focus: lower
+      exercises:
+        - id: back_squat
+          name: Back squat
+          scheme: top_set_backoff
+          warmup_sets: 2
+          top_set_reps: 5-7
+          backoff_sets: 2
+          backoff_reps: 6-8
+          backoff_drop_pct: 12.5
+          rir: {top_set: 0-1, backoff: 1-2}
+          rest_seconds: 180-240
+          loading: {mode: per_side, base_weight_kg: 20}
+        - id: romanian_deadlift
+          name: Romanian deadlift
+          reps: 8-10
+          rir: {last_set: 1-2}  # no failure on hinges
+          loading: {mode: per_side, base_weight_kg: 20}
+        - id: leg_press
+          name: Leg press
+          sets: 3
+          reps: 10-12
+          load_increment_kg: 5
+        - id: lying_leg_curl
+          name: Lying leg curl
+          loading: {mode: machine_stack}
+        - id: standing_calf_raise
+          name: Standing calf raise
+          reps: 10-15
+          loading: {mode: machine_stack}
+
+    - id: upper_b
+      name: Upper B
+      focus: upper
+      exercises:
+        - id: db_shoulder_press
+          name: Seated dumbbell shoulder press
+          scheme: top_set_backoff
+          warmup_sets: 2
+          top_set_reps: 6-8
+          backoff_sets: 2
+          backoff_reps: 8-10
+          backoff_drop_pct: 10
+          rir: {top_set: 0-1, backoff: 1-2}
+          load_increment_kg: 2
+          loading: {mode: per_dumbbell}
+        - id: lat_pulldown
+          name: Lat pulldown
+          loading:
+            mode: machine_stack
+            stack_kg: [45, 52, 59, 66, 73]   # optional: known pin positions, used for rounding
+        - id: chest_supported_row
+          name: Chest-supported T-bar row
+          loading: {mode: total}
+        - id: pec_deck
+          name: Pec deck
+          loading: {mode: machine_stack}
+        - id: rear_delt_fly
+          name: Reverse pec deck
+          reps: 12-15
+          loading: {mode: machine_stack}
+        - id: ez_bar_curl
+          name: EZ-bar curl
+          loading: {mode: total}
+
+    - id: lower_b
+      name: Lower B
+      focus: lower
+      exercises:
+        - id: deadlift
+          name: Deadlift
+          scheme: top_set_backoff
+          warmup_sets: 2
+          top_set_reps: 4-6
+          backoff_sets: 2
+          backoff_reps: 5-7
+          backoff_drop_pct: 15
+          rir: {top_set: 1, backoff: 1-2}
+          rest_seconds: 180-240
+          load_increment_kg: 5
+          loading: {mode: per_side, base_weight_kg: 20}
+        - id: bulgarian_split_squat
+          name: Bulgarian split squat
+          reps: 8-10
+          rir: {last_set: 1-2}
+          unilateral: true
+          load_increment_kg: 2
+          loading: {mode: per_dumbbell}
+        - id: hip_thrust
+          name: Barbell hip thrust
+          reps: 8-10
+          rir: {last_set: 1-2}
+          load_increment_kg: 5
+          loading: {mode: per_side, base_weight_kg: 20}
+        - id: leg_extension
+          name: Leg extension
+          loading: {mode: machine_stack}
+        - id: ab_wheel
+          name: Ab wheel rollout
+          reps: 8-12
+          loading: {mode: bodyweight}
+
+  # Optional training block. Stored only for now; the engine decides how to use it later.
+  block:
+    weeks: 5
+    start_date: null
+    deload_week: 5
+    deload: {load_pct: 80, sets: 2, rir: 4}
+
+  # How to combine gym and classes. Plain text for now; a structured format comes later.
+  planning_rules:
+    - No heavy lower session the day after a box class.
+    - At least 48 h between a heavy lower session and a hybrid race class.
+    - A hybrid race class counts as a lower-body day.
+
+equipment:
+  gym:
+    type: commercial        # commercial | home | other
+    items: []               # empty = standard commercial gym
+    plates_kg: [1.25, 2.5, 5, 10, 15, 20, 25]
+    dumbbell_step_kg: 2
+  box:
+    items: []               # empty = standard box equipment
+
+maxes:                      # known or estimated maxes
+  - exercise: back_squat
+    kind: one_rm_estimate   # one_rm_estimate | rep_max
+    value_kg: 120
+    loading: total
+    date: 2026-11
+  - exercise: weighted_pull_up
+    kind: rep_max
+    value_kg: 10            # added weight
+    reps: 8
+    loading: added_weight
+
+constraints:                # free text; Kide never diagnoses
+  injuries: []
+  avoid_exercises: []
+  notes: null
+
+# Optional weekly hard sets per muscle group. If left empty, documented defaults
+# are used (phase 4). Roughly 10-20 weekly sets is a common hypertrophy range.
+volume_targets:
+  chest: 10-16
+  back: 12-18
+  quads: 10-16
