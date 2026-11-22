@@ -1,0 +1,28 @@
+# Spanish. Must have exactly the same keys and placeholders as en.yaml.
+meta:
+  language_name: Español
+
+common:
+  "yes": Sí
+  "no": "No"
+  cancel: Cancelar
+  confirm: Confirmar
+  edit: Corregir
+
+checkin:
+  question: ¿Qué toca hoy?
+  next_session: "Siguiente en tu rotación: {session}"
+  options:
+    gym: Gimnasio
+    box: Box
+    rest: Descanso
+    other: Otro
+
+errors:
+  generic: Algo ha fallado. Vuelve a intentarlo en un momento.
+  profile_invalid: "Tu perfil tiene errores y no se ha podido cargar:\n{details}"
+
+safety:
+  medical_disclaimer: >-
+    Kide no es consejo médico. Si notas dolor agudo, dolor en el pecho o mareos,
+    para de entrenar y consulta a un médico.

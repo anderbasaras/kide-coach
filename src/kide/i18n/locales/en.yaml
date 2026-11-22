@@ -1,0 +1,29 @@
+# English (fallback locale: every key must exist here).
+# Keys are grouped by feature. Placeholders use {name} syntax and must match across locales.
+meta:
+  language_name: English
+
+common:
+  "yes": "Yes"
+  "no": "No"
+  cancel: Cancel
+  confirm: Confirm
+  edit: Edit
+
+checkin:
+  question: What's on today?
+  next_session: "Next in your rotation: {session}"
+  options:
+    gym: Gym
+    box: Box
+    rest: Rest
+    other: Other
+
+errors:
+  generic: Something went wrong. Please try again in a moment.
+  profile_invalid: "Your profile has errors and could not be loaded:\n{details}"
+
+safety:
+  medical_disclaimer: >-
+    Kide is not medical advice. If you feel acute pain, chest pain or dizziness,
+    stop training and see a doctor.
