@@ -9,6 +9,8 @@ from __future__ import annotations
 import datetime as dt
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session, sessionmaker
 from telegram.ext import ContextTypes
@@ -34,6 +36,14 @@ class Services:
     # Language chosen with /language (stored in users.language), None = profile language.
     chosen_language: str | None = None
     clock: Callable[[], dt.datetime] = field(default=utc_now)
+
+    @property
+    def tz(self) -> ZoneInfo:
+        return ZoneInfo(self.profile.identity.timezone)
+
+    @property
+    def data_dir(self) -> Path:
+        return self.settings.data_dir
 
     @property
     def locale(self) -> str:

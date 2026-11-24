@@ -1,0 +1,135 @@
+"""Updates through the real Application: auth guard, commands and the check-in flow wired
+together. Only the Bot API calls are replaced; nothing goes to the network."""
+
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from telegram.ext import ExtBot
+
+from kide.bot.app import build_application
+from kide.storage import DayType
+from kide.storage.repositories import unit_of_work
+from tests.bot_helpers import make_services
+from tests.telegram_factories import (
+    STRANGER_CHAT,
+    callback_update,
+    message_update,
+    photo_update,
+)
+
+
+@pytest.fixture
+def api(monkeypatch):
+    """Replace the Bot API methods used by the handlers on every ExtBot."""
+    calls = MagicMock()
+    for method in (
+        "send_message",
+        "edit_message_text",
+        "edit_message_reply_markup",
+        "answer_callback_query",
+        "set_my_commands",
+    ):
+        mock = AsyncMock()
+        calls.attach_mock(mock, method)
+        monkeypatch.setattr(ExtBot, method, mock)
+
+    async def download(path):
+        from pathlib import Path
+
+        Path(path).write_bytes(b"img")
+
+    telegram_file = MagicMock()
+    telegram_file.download_to_drive = AsyncMock(side_effect=download)
+    get_file = AsyncMock(return_value=telegram_file)
+    calls.attach_mock(get_file, "get_file")
+    monkeypatch.setattr(ExtBot, "get_file", get_file)
+    return calls
+
+
+def texts(api):
+    return [kw.get("text") for name, _a, kw in api.mock_calls if name == "send_message"]
+
+
+@pytest.fixture
+async def app(tmp_path, profile_data, api):
+    profile_data["identity"]["language"] = "es"
+    services = make_services(tmp_path, profile_data)
+    application = build_application(services)
+    async with application:  # initialize() without polling
+        await application.start()  # starts the JobQueue (conversation timeout)
+        yield application, services
+        await application.stop()
+
+
+async def feed(application, update):
+    update.set_bot(application.bot)
+    for obj in (update.message, update.callback_query):
+        if obj is not None:
+            obj.set_bot(application.bot)
+            if getattr(obj, "message", None) is not None:
+                obj.message.set_bot(application.bot)
+            for photo in getattr(obj, "photo", ()) or ():
+                photo.set_bot(application.bot)
+    await application.process_update(update)
+
+
+@pytest.fixture(autouse=True)
+def no_get_me(monkeypatch):
+    """initialize() asks Telegram who the bot is; answer locally."""
+    from telegram import User
+
+    me = User(id=1, first_name="Kide", is_bot=True, username="kide_test_bot")
+
+    async def get_me(self, *args, **kwargs):
+        self._bot_user = me  # what the real get_me stores
+        return me
+
+    monkeypatch.setattr(ExtBot, "get_me", get_me)
+
+
+@pytest.mark.anyio
+async def test_full_box_day_through_the_application(app, api):
+    application, services = app
+    day = services.clock().date()
+
+    await feed(application, message_update(text="/hoy"))
+    assert texts(api)[-1] == "¿Qué toca hoy?"
+
+    await feed(application, callback_update(data=f"ci:{day}:box"))
+    assert "Mándame el WOD" in texts(api)[-1]
+
+    await feed(application, message_update(text="EMOM 10: 5 thrusters"))
+    await feed(application, photo_update("PH9"))
+    with unit_of_work(services.session_factory) as repos:
+        (training,) = repos.sessions.for_day(services.user_id, day)
+        session_id = training.id
+    await feed(application, callback_update(data=f"wod:{session_id}"))
+    assert texts(api)[-1] == "WOD guardado. Fotos: 1 · Texto: Sí."
+
+    # After "Done" a text is no longer part of the WOD.
+    await feed(application, message_update(text="something else"))
+    with unit_of_work(services.session_factory) as repos:
+        (training,) = repos.sessions.for_day(services.user_id, day)
+        assert training.type is DayType.BOX
+        assert training.raw_input == "EMOM 10: 5 thrusters"
+        assert len(training.photos) == 1
+
+
+@pytest.mark.anyio
+async def test_stranger_gets_nothing_through_the_application(app, api):
+    application, services = app
+    day = services.clock().date()
+    await feed(application, message_update(STRANGER_CHAT, text="/hoy"))
+    await feed(application, callback_update(STRANGER_CHAT, data=f"ci:{day}:gym"))
+    assert api.mock_calls == []
+    with unit_of_work(services.session_factory) as repos:
+        assert repos.sessions.for_day(services.user_id, day) == []
+
+
+@pytest.mark.anyio
+async def test_spanish_and_english_command_names_both_work(app, api):
+    application, _ = app
+    await feed(application, message_update(text="/ayuda"))
+    await feed(application, message_update(text="/help"))
+    first, second = texts(api)
+    assert first == second

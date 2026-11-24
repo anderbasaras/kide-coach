@@ -17,7 +17,7 @@ from telegram.error import InvalidToken, NetworkError
 from telegram.ext import Application, ApplicationBuilder
 
 from kide.bot.auth import make_auth_guard
-from kide.bot.handlers import commands
+from kide.bot.handlers import checkin, commands
 from kide.bot.menu import sync_menus
 from kide.bot.services import SERVICES_KEY, Services
 from kide.config import ConfigError, Settings, get_settings
@@ -106,6 +106,7 @@ def build_application(services: Services) -> Application:
 
     application.add_handler(make_auth_guard(services.settings.allowed_chat_ids), group=-1)
     commands.register(application, services)
+    checkin.register(application, services)
     return application
 
 
@@ -125,6 +126,11 @@ def run() -> None:
     )
     try:
         application.run_polling(allowed_updates=ALLOWED_UPDATES)
+    except KeyboardInterrupt:
+        # A second Ctrl+C while shutting down (common on Windows). Everything is
+        # already saved: each step commits its own transaction.
+        logger.info("Kide stopped before shutdown finished")
+        return
     except InvalidToken:
         raise StartupError(
             "Telegram rejected TELEGRAM_BOT_TOKEN. Copy it again from @BotFather (/token)."

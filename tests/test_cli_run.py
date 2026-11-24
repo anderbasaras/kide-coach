@@ -108,3 +108,13 @@ def test_auth_guard_runs_before_every_other_handler(valid_env):
     first_group = min(application.handlers)
     assert first_group < 0
     assert isinstance(application.handlers[first_group][0], TypeHandler)
+
+
+def test_ctrl_c_during_shutdown_is_a_clean_exit(capsys, valid_env, monkeypatch):
+    def interrupted(self, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(Application, "run_polling", interrupted)
+    code, err = run_cli(capsys)
+    assert code == 0
+    assert "Traceback" not in err

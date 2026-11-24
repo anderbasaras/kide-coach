@@ -47,6 +47,38 @@ checkin:
     box: Box
     rest: Descanso
     other: Otro
+  chosen_today: "Hoy: {choice}"
+  chosen_on: "{date}: {choice}"
+  already_answered: "Hoy ya está apuntado: {summary}."
+  button_already_answered: "Ese día ya está apuntado. Escribe /{today} para ver lo de hoy."
+  invalid_button: "Ese botón ya no vale. Escribe /{today} para empezar de nuevo."
+  summary_box: "{choice} (fotos: {photos}, texto: {text})"
+  summary_note: "{choice} (con nota)"
+  summary_plain: "{choice}"
+
+wod:
+  ask: >-
+    Mándame el WOD: texto, una o varias fotos de la pizarra, o las dos cosas.
+    Cuando termines, pulsa «Listo».
+  done_button: Listo
+  received: "Recibido. Fotos: {photos} · Texto: {text}. Manda más o pulsa «Listo»."
+  saved: "WOD guardado. Fotos: {photos} · Texto: {text}."
+  saved_empty: Box apuntado, sin WOD.
+  unsupported: Mándame el WOD como texto o foto, o pulsa «Listo».
+  photo_too_large: >-
+    Ese archivo es demasiado grande: Telegram solo deja a los bots descargar
+    archivos de hasta 20 MB. Mándalo como foto.
+  photo_failed: No he podido guardar esa foto. Vuelve a mandarla.
+
+note:
+  ask: "{choice} apuntado. ¿Quieres añadir una nota? Escríbela o pulsa «Sin nota»."
+  skip_button: Sin nota
+  saved: "Guardado: {choice}."
+  saved_with_note: "Guardado: {choice}, con tu nota."
+  unsupported: Escribe la nota como texto o pulsa «Sin nota».
+
+formats:
+  date: "%d/%m/%Y"
 
 errors:
   generic: Algo ha fallado. Vuelve a intentarlo en un momento.

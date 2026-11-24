@@ -48,6 +48,38 @@ checkin:
     box: Box
     rest: Rest
     other: Other
+  chosen_today: "Today: {choice}"
+  chosen_on: "{date}: {choice}"
+  already_answered: "Today is already logged: {summary}."
+  button_already_answered: "That day is already logged. Send /{today} to see today."
+  invalid_button: "That button is no longer valid. Send /{today} to start again."
+  summary_box: "{choice} (photos: {photos}, text: {text})"
+  summary_note: "{choice} (with a note)"
+  summary_plain: "{choice}"
+
+wod:
+  ask: >-
+    Send me the WOD: text, one or more photos of the whiteboard, or both.
+    Tap “Done” when you're finished.
+  done_button: Done
+  received: "Got it. Photos: {photos} · Text: {text}. Send more or tap “Done”."
+  saved: "WOD saved. Photos: {photos} · Text: {text}."
+  saved_empty: Box logged, without the WOD.
+  unsupported: Send me the WOD as text or a photo, or tap “Done”.
+  photo_too_large: >-
+    That file is too large: Telegram only lets bots download files up to 20 MB.
+    Send it as a photo instead.
+  photo_failed: I couldn't save that photo. Please send it again.
+
+note:
+  ask: "{choice} logged. Want to add a note? Write it, or tap “No note”."
+  skip_button: No note
+  saved: "Saved: {choice}."
+  saved_with_note: "Saved: {choice}, with your note."
+  unsupported: Write the note as text, or tap “No note”.
+
+formats:
+  date: "%Y-%m-%d"
 
 errors:
   generic: Something went wrong. Please try again in a moment.

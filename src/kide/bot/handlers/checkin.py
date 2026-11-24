@@ -1,0 +1,441 @@
+"""The daily check-in: "What's on today?" and what happens after each option.
+
+Flow (ConversationHandler, one per chat and user):
+
+- The question is sent by /today (or the daily job, step 5) with four buttons.
+- Tapping a button is the entry point. The choice is saved at once.
+- Box -> ``Flow.WOD``: every text and photo is saved as it arrives (albums included)
+  until "Done".
+- Gym / Rest / Other -> ``Flow.NOTE``: one optional note, or "No note".
+
+Everything is saved step by step, so nothing is lost if the bot restarts in the middle;
+the conversation state itself is not persisted (D-029). "Done" and "No note" also work
+after a restart: they only close the flow and show what was saved.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import logging
+import warnings
+
+from telegram import Bot, Message, Update
+from telegram.error import TelegramError
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    ConversationHandler,
+    MessageHandler,
+    filters,
+)
+from telegram.warnings import PTBUserWarning
+
+from kide.bot.keyboards import (
+    CHECKIN_PREFIX,
+    NOTE_SKIP_PREFIX,
+    WOD_DONE_PREFIX,
+    checkin_keyboard,
+    parse_checkin,
+    parse_session_id,
+    single_button,
+)
+from kide.bot.menu import command_name, command_names
+from kide.bot.photos import PhotoTooLargeError, best_image, download_image, relative_photo_path
+from kide.bot.rules import AnswerVerdict, Flow, flow_after_choice, judge_answer, local_date
+from kide.bot.services import Services, get_services
+from kide.storage.models import DayType, TrainingSession
+from kide.storage.repositories import unit_of_work
+
+logger = logging.getLogger(__name__)
+
+SESSION_KEY = "kide_session_id"  # user_data: the session the open flow is filling
+ALBUM_ACK_DELAY_S = 1.5  # an album arrives as one message per photo: acknowledge once
+CONVERSATION_TIMEOUT = dt.timedelta(hours=2)
+
+# New messages only: edited messages are not part of a flow (see fallback handlers).
+NEW_MESSAGE = filters.UpdateType.MESSAGE & ~filters.COMMAND
+IMAGE = filters.PHOTO | filters.Document.IMAGE
+
+
+# --- Texts ---------------------------------------------------------------------------
+
+
+def choice_label(services: Services, choice: DayType) -> str:
+    return services.t(f"checkin.options.{choice.value}")
+
+
+def yes_no(services: Services, value: bool) -> str:
+    return services.t("common.yes" if value else "common.no")
+
+
+def describe_session(services: Services, training: TrainingSession) -> str:
+    label = choice_label(services, training.type)
+    if training.type is DayType.BOX:
+        return services.t(
+            "checkin.summary_box",
+            choice=label,
+            photos=len(training.photos),
+            text=yes_no(services, bool(training.raw_input)),
+        )
+    if training.notes:
+        return services.t("checkin.summary_note", choice=label)
+    return services.t("checkin.summary_plain", choice=label)
+
+
+def describe_day(services: Services, sessions: list[TrainingSession]) -> str:
+    return " + ".join(describe_session(services, training) for training in sessions)
+
+
+def format_day(services: Services, day: dt.date) -> str:
+    return day.strftime(services.t("formats.date"))
+
+
+def today_command(services: Services) -> str:
+    return command_name(services.translator, "today", services.locale)
+
+
+# --- Sending the question ------------------------------------------------------------
+
+
+def today_for(services: Services) -> dt.date:
+    return local_date(services.clock(), services.tz)
+
+
+async def send_checkin_question(bot: Bot, services: Services, chat_id: int, day: dt.date) -> bool:
+    """Ask "What's on today?" for ``day`` unless it is already answered.
+
+    Returns True if the question was sent. The first send is recorded in ``sent_at``.
+    """
+    with unit_of_work(services.session_factory) as repos:
+        checkin = repos.checkins.get_or_create(services.user_id, day)
+        if checkin.sessions:
+            return False
+    await bot.send_message(
+        chat_id=chat_id,
+        text=services.t("checkin.question"),
+        reply_markup=checkin_keyboard(services.t, day),
+    )
+    with unit_of_work(services.session_factory) as repos:
+        checkin = repos.checkins.get_or_create(services.user_id, day)
+        repos.checkins.mark_sent(checkin, chat_id, services.clock())
+    return True
+
+
+async def today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/today: ask now, or show what is already logged for today."""
+    services = get_services(context)
+    chat = update.effective_chat
+    message = update.effective_message
+    if chat is None or message is None:
+        return
+    day = today_for(services)
+    with unit_of_work(services.session_factory) as repos:
+        sessions = repos.sessions.for_day(services.user_id, day)
+        summary = describe_day(services, sessions) if sessions else None
+    if summary:
+        await message.reply_text(services.t("checkin.already_answered", summary=summary))
+        return
+    await send_checkin_question(context.bot, services, chat.id, day)
+
+
+# --- Choosing an option --------------------------------------------------------------
+
+
+async def _safe_edit(message: Message | None, text: str) -> None:
+    """Replace the question with the answer; old messages may no longer be editable."""
+    if message is None:
+        return
+    try:
+        await message.edit_text(text)
+    except TelegramError as exc:
+        logger.debug("Could not edit the check-in message: %s", exc)
+
+
+async def choice_made(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    chat = update.effective_chat
+    if query is None or chat is None:
+        return ConversationHandler.END
+    services = get_services(context)
+    await query.answer()
+
+    parsed = parse_checkin(query.data)
+    today_day = today_for(services)
+    if parsed is None:
+        verdict = AnswerVerdict.INVALID_DAY
+    else:
+        day, choice = parsed
+        with unit_of_work(services.session_factory) as repos:
+            checkin = repos.checkins.get_or_create(services.user_id, day)
+            verdict = judge_answer(day, today_day, already_answered=bool(checkin.sessions))
+            if verdict is AnswerVerdict.ACCEPT:
+                training = repos.sessions.create(checkin, choice)
+                repos.checkins.refresh_choice(checkin, services.clock())
+                session_id = training.id
+
+    if verdict is not AnswerVerdict.ACCEPT:
+        key = (
+            "checkin.button_already_answered"
+            if verdict is AnswerVerdict.ALREADY_ANSWERED
+            else "checkin.invalid_button"
+        )
+        await context.bot.send_message(
+            chat_id=chat.id, text=services.t(key, today=today_command(services))
+        )
+        return ConversationHandler.END
+
+    label = choice_label(services, choice)
+    answered = (
+        services.t("checkin.chosen_today", choice=label)
+        if day == today_day
+        else services.t("checkin.chosen_on", date=format_day(services, day), choice=label)
+    )
+    await _safe_edit(query.message if isinstance(query.message, Message) else None, answered)
+    logger.info("Check-in answered for %s: %s", day, choice.value)
+
+    context.user_data[SESSION_KEY] = session_id
+    flow = flow_after_choice(choice)
+    if flow is Flow.WOD:
+        await context.bot.send_message(
+            chat_id=chat.id,
+            text=services.t("wod.ask"),
+            reply_markup=single_button(services.t("wod.done_button"), WOD_DONE_PREFIX, session_id),
+        )
+    else:
+        await context.bot.send_message(
+            chat_id=chat.id,
+            text=services.t("note.ask", choice=label),
+            reply_markup=single_button(
+                services.t("note.skip_button"), NOTE_SKIP_PREFIX, session_id
+            ),
+        )
+    return flow
+
+
+def _open_session_id(context: ContextTypes.DEFAULT_TYPE) -> int | None:
+    value = context.user_data.get(SESSION_KEY) if context.user_data is not None else None
+    return value if isinstance(value, int) else None
+
+
+# --- Box: collecting the WOD ---------------------------------------------------------
+
+
+def _wod_status(services: Services, session_id: int) -> tuple[int, bool] | None:
+    """``(photo count, has text)`` of a session, or None if it no longer exists."""
+    with unit_of_work(services.session_factory) as repos:
+        training = repos.sessions.get(session_id)
+        if training is None:
+            return None
+        return len(training.photos), bool(training.raw_input)
+
+
+async def send_wod_ack(bot: Bot, services: Services, chat_id: int, session_id: int) -> None:
+    status = _wod_status(services, session_id)
+    if status is None:
+        return
+    photos, has_text = status
+    await bot.send_message(
+        chat_id=chat_id,
+        text=services.t("wod.received", photos=photos, text=yes_no(services, has_text)),
+        reply_markup=single_button(services.t("wod.done_button"), WOD_DONE_PREFIX, session_id),
+    )
+
+
+async def _album_ack_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    job = context.job
+    if job is None or job.chat_id is None or not isinstance(job.data, int):
+        return
+    await send_wod_ack(context.bot, get_services(context), job.chat_id, job.data)
+
+
+async def wod_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    services = get_services(context)
+    message = update.effective_message
+    session_id = _open_session_id(context)
+    if message is None or message.text is None or session_id is None:
+        return ConversationHandler.END
+    with unit_of_work(services.session_factory) as repos:
+        training = repos.sessions.get(session_id)
+        if training is None:
+            return ConversationHandler.END
+        repos.sessions.append_text(training, message.text)
+    await send_wod_ack(context.bot, services, message.chat_id, session_id)
+    return Flow.WOD
+
+
+async def wod_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    services = get_services(context)
+    message = update.effective_message
+    session_id = _open_session_id(context)
+    if message is None or session_id is None:
+        return ConversationHandler.END
+    found = best_image(message)
+    if found is None:
+        return Flow.WOD
+    image, extension = found
+
+    with unit_of_work(services.session_factory) as repos:
+        training = repos.sessions.get(session_id)
+        if training is None:
+            return ConversationHandler.END
+        if repos.sessions.has_photo(training, image.file_unique_id):
+            return Flow.WOD  # same file delivered twice
+        relative = relative_photo_path(training.date, session_id, image.file_unique_id, extension)
+
+    try:
+        await download_image(image, services.data_dir, relative)
+    except PhotoTooLargeError:
+        await message.reply_text(services.t("wod.photo_too_large"))
+        return Flow.WOD
+    except (TelegramError, OSError) as exc:
+        logger.warning("Could not download a photo for session %s: %s", session_id, exc)
+        await message.reply_text(services.t("wod.photo_failed"))
+        return Flow.WOD
+
+    with unit_of_work(services.session_factory) as repos:
+        training = repos.sessions.get(session_id)
+        if training is not None:
+            repos.sessions.add_photo(
+                training, relative.as_posix(), image.file_unique_id, message.media_group_id
+            )
+
+    if message.media_group_id and context.job_queue is not None:
+        name = f"wod-ack:{message.chat_id}:{message.media_group_id}"
+        for job in context.job_queue.get_jobs_by_name(name):
+            job.schedule_removal()
+        context.job_queue.run_once(
+            _album_ack_job, ALBUM_ACK_DELAY_S, data=session_id, chat_id=message.chat_id, name=name
+        )
+    else:
+        await send_wod_ack(context.bot, services, message.chat_id, session_id)
+    return Flow.WOD
+
+
+async def wod_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Close the box flow. Also works after a restart, outside the conversation."""
+    query = update.callback_query
+    chat = update.effective_chat
+    if query is None or chat is None:
+        return ConversationHandler.END
+    services = get_services(context)
+    await query.answer()
+    session_id = parse_session_id(query.data, WOD_DONE_PREFIX)
+    status = _wod_status(services, session_id) if session_id is not None else None
+    await _remove_buttons(query.message)
+    if context.user_data is not None:
+        context.user_data.pop(SESSION_KEY, None)
+    if status is None:
+        return ConversationHandler.END
+    photos, has_text = status
+    text = (
+        services.t("wod.saved", photos=photos, text=yes_no(services, has_text))
+        if photos or has_text
+        else services.t("wod.saved_empty")
+    )
+    await context.bot.send_message(chat_id=chat.id, text=text)
+    return ConversationHandler.END
+
+
+async def wod_unsupported(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.effective_message:
+        await update.effective_message.reply_text(get_services(context).t("wod.unsupported"))
+    return Flow.WOD
+
+
+# --- Gym / Rest / Other: optional note -----------------------------------------------
+
+
+def _session_label(services: Services, session_id: int | None) -> str | None:
+    if session_id is None:
+        return None
+    with unit_of_work(services.session_factory) as repos:
+        training = repos.sessions.get(session_id)
+        return choice_label(services, training.type) if training else None
+
+
+async def note_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    services = get_services(context)
+    message = update.effective_message
+    session_id = _open_session_id(context)
+    if message is None or message.text is None or session_id is None:
+        return ConversationHandler.END
+    with unit_of_work(services.session_factory) as repos:
+        training = repos.sessions.get(session_id)
+        if training is None:
+            return ConversationHandler.END
+        repos.sessions.set_note(training, message.text)
+        label = choice_label(services, training.type)
+    context.user_data.pop(SESSION_KEY, None)
+    await message.reply_text(services.t("note.saved_with_note", choice=label))
+    return ConversationHandler.END
+
+
+async def note_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """'No note'. Also works after a restart, outside the conversation."""
+    query = update.callback_query
+    chat = update.effective_chat
+    if query is None or chat is None:
+        return ConversationHandler.END
+    services = get_services(context)
+    await query.answer()
+    await _remove_buttons(query.message)
+    if context.user_data is not None:
+        context.user_data.pop(SESSION_KEY, None)
+    label = _session_label(services, parse_session_id(query.data, NOTE_SKIP_PREFIX))
+    if label:
+        await context.bot.send_message(chat_id=chat.id, text=services.t("note.saved", choice=label))
+    return ConversationHandler.END
+
+
+async def note_unsupported(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if update.effective_message:
+        await update.effective_message.reply_text(get_services(context).t("note.unsupported"))
+    return Flow.NOTE
+
+
+async def _remove_buttons(message: object) -> None:
+    if not isinstance(message, Message):
+        return
+    try:
+        await message.edit_reply_markup(reply_markup=None)
+    except TelegramError as exc:
+        logger.debug("Could not remove the buttons: %s", exc)
+
+
+# --- Wiring ----------------------------------------------------------------------------
+
+
+def build_conversation() -> ConversationHandler:
+    with warnings.catch_warnings():
+        # per_message=False is intended: the flow mixes buttons and messages, per chat/user.
+        warnings.filterwarnings("ignore", category=PTBUserWarning, message=".*per_message.*")
+        return ConversationHandler(
+            entry_points=[CallbackQueryHandler(choice_made, pattern=f"^{CHECKIN_PREFIX}:")],
+            states={
+                Flow.WOD: [
+                    MessageHandler(NEW_MESSAGE & filters.TEXT, wod_text),
+                    MessageHandler(NEW_MESSAGE & IMAGE, wod_photo),
+                    CallbackQueryHandler(wod_done, pattern=f"^{WOD_DONE_PREFIX}:"),
+                    MessageHandler(NEW_MESSAGE, wod_unsupported),
+                ],
+                Flow.NOTE: [
+                    MessageHandler(NEW_MESSAGE & filters.TEXT, note_text),
+                    CallbackQueryHandler(note_skip, pattern=f"^{NOTE_SKIP_PREFIX}:"),
+                    MessageHandler(NEW_MESSAGE, note_unsupported),
+                ],
+            },
+            fallbacks=[],
+            allow_reentry=True,
+            conversation_timeout=CONVERSATION_TIMEOUT,
+            name="checkin",
+        )
+
+
+def register(application: Application, services: Services) -> None:
+    application.add_handler(build_conversation())
+    application.add_handler(CommandHandler(command_names(services.translator, "today"), today))
+    # Buttons tapped after a restart, when the conversation is no longer open.
+    application.add_handler(CallbackQueryHandler(wod_done, pattern=f"^{WOD_DONE_PREFIX}:"))
+    application.add_handler(CallbackQueryHandler(note_skip, pattern=f"^{NOTE_SKIP_PREFIX}:"))

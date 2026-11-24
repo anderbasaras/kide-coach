@@ -62,15 +62,36 @@ def make_bot() -> MagicMock:
         "set_my_commands",
         "get_file",
     ):
-        setattr(bot, method, AsyncMock(name=method))
+        # Unnamed so the calls are also recorded, in order, in bot.mock_calls.
+        setattr(bot, method, AsyncMock())
     bot.defaults = None
     return bot
 
 
-def make_context(services: Services, bot: MagicMock) -> SimpleNamespace:
+def make_context(
+    services: Services, bot: MagicMock, user_data: dict | None = None, job_queue: Any = None
+) -> SimpleNamespace:
     return SimpleNamespace(
-        bot=bot, bot_data={SERVICES_KEY: services}, user_data={}, chat_data={}, job_queue=None
+        bot=bot,
+        bot_data={SERVICES_KEY: services},
+        user_data={} if user_data is None else user_data,
+        chat_data={},
+        job_queue=job_queue,
+        job=None,
     )
+
+
+def fake_downloads(bot: MagicMock) -> None:
+    """Make ``bot.get_file(...).download_to_drive(path)`` write a small file."""
+    from pathlib import Path
+
+    async def download(path):
+        Path(path).write_bytes(b"fake image")
+        return Path(path)
+
+    telegram_file = MagicMock(name="file")
+    telegram_file.download_to_drive = AsyncMock(side_effect=download)
+    bot.get_file.return_value = telegram_file
 
 
 def bind(update: Update, bot: MagicMock) -> Update:
@@ -78,12 +99,22 @@ def bind(update: Update, bot: MagicMock) -> Update:
     for obj in (update, update.message, update.edited_message, update.callback_query):
         if obj is not None:
             obj.set_bot(bot)
+    msg = update.message
+    if msg is not None:
+        for photo in msg.photo:
+            photo.set_bot(bot)
+        if msg.document is not None:
+            msg.document.set_bot(bot)
     if update.callback_query and update.callback_query.message:
         update.callback_query.message.set_bot(bot)
     return update
 
 
 def sent_texts(bot: MagicMock) -> list[str]:
-    """Texts sent or edited by the bot, in order."""
-    calls = bot.send_message.await_args_list + bot.edit_message_text.await_args_list
-    return [call.kwargs.get("text", "") for call in calls]
+    """Texts sent or edited by the bot, in the order the user would see them."""
+    return [
+        call.kwargs.get("text", "")
+        for name, _args, kwargs in bot.mock_calls
+        if name in ("send_message", "edit_message_text")
+        for call in [SimpleNamespace(kwargs=kwargs)]
+    ]
