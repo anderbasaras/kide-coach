@@ -3,15 +3,42 @@
 meta:
   language_name: English
 
+commands:
+  # `name` is what the user types. Every name works in every language; the menu shows
+  # the names of the user's language. English names must equal the command id.
+  start:
+    name: start
+    description: Greeting and profile check
+  today:
+    name: today
+    description: What's on today? (check-in)
+  help:
+    name: help
+    description: What I can do
+  language:
+    name: language
+    description: Change the language
+
+start:
+  greeting: "Hi {name}, I'm Kide, your hybrid training coach."
+  profile: "Your profile is loaded. Rotation: {rotation}. Daily check-in at {time} ({timezone})."
+  next: "Send /{today} to tell me what's on today, or /{help} to see what I can do."
+
+help:
+  intro: "I'm Kide, your hybrid training coach. These are my commands:"
+  command: "/{name} · {description}"
+  footer: "Every day at {time} I'll ask you what's on today."
+
+language:
+  prompt: "Choose a language:"
+  changed: "Done, I'll speak English from now on."
+
 common:
   "yes": "Yes"
   "no": "No"
   cancel: Cancel
   confirm: Confirm
   edit: Edit
-
-start:
-  greeting: "Hi {name}, I'm Kide, your hybrid training coach."
 
 checkin:
   question: What's on today?

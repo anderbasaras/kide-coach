@@ -30,16 +30,21 @@ class Services:
     profile: Profile
     translator: Translator
     session_factory: sessionmaker[Session]
+    user_id: int
+    # Language chosen with /language (stored in users.language), None = profile language.
+    chosen_language: str | None = None
     clock: Callable[[], dt.datetime] = field(default=utc_now)
-
-    def t(self, key: str, **params: object) -> str:
-        """Translate ``key`` in the user's language."""
-        return self.translator.t(key, locale=self.locale, **params)
 
     @property
     def locale(self) -> str:
-        """Language for the bot user. The /language choice is added in step 3."""
-        return self.profile.identity.language
+        """Language of the bot user: the /language choice wins over the profile (D-027)."""
+        if self.chosen_language in self.translator.available_locales:
+            return self.chosen_language
+        return self.translator.default_locale
+
+    def t(self, key: str, locale: str | None = None, **params: object) -> str:
+        """Translate ``key`` in the user's language (or ``locale``)."""
+        return self.translator.t(key, locale=locale or self.locale, **params)
 
 
 def get_services(context: ContextTypes.DEFAULT_TYPE) -> Services:

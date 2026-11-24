@@ -2,15 +2,42 @@
 meta:
   language_name: Español
 
+commands:
+  # `name` es lo que escribe el usuario. Todos los nombres funcionan en todos los idiomas;
+  # el menú muestra los del idioma del usuario.
+  start:
+    name: start
+    description: Saludo y comprobación del perfil
+  today:
+    name: hoy
+    description: ¿Qué toca hoy? (check-in)
+  help:
+    name: ayuda
+    description: Qué puedo hacer
+  language:
+    name: idioma
+    description: Cambiar el idioma
+
+start:
+  greeting: "Hola, {name}. Soy Kide, tu entrenador híbrido."
+  profile: "Tu perfil está cargado. Rotación: {rotation}. Check-in diario a las {time} ({timezone})."
+  next: "Escribe /{today} para decirme qué toca hoy, o /{help} para ver qué puedo hacer."
+
+help:
+  intro: "Soy Kide, tu entrenador híbrido. Estos son mis comandos:"
+  command: "/{name} · {description}"
+  footer: "Cada día a las {time} te preguntaré qué toca hoy."
+
+language:
+  prompt: "Elige un idioma:"
+  changed: "Hecho, a partir de ahora te hablo en español."
+
 common:
   "yes": Sí
   "no": "No"
   cancel: Cancelar
   confirm: Confirmar
   edit: Corregir
-
-start:
-  greeting: "Hola, {name}. Soy Kide, tu entrenador híbrido."
 
 checkin:
   question: ¿Qué toca hoy?

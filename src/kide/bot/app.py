@@ -18,12 +18,14 @@ from telegram.ext import Application, ApplicationBuilder
 
 from kide.bot.auth import make_auth_guard
 from kide.bot.handlers import commands
+from kide.bot.menu import sync_menus
 from kide.bot.services import SERVICES_KEY, Services
 from kide.config import ConfigError, Settings, get_settings
 from kide.i18n import Translator
 from kide.logging_config import configure_logging
 from kide.profile import ProfileError, load_profile
 from kide.storage import make_engine, make_session_factory, upgrade_database
+from kide.storage.repositories import unit_of_work
 
 logger = logging.getLogger(__name__)
 
@@ -70,23 +72,40 @@ def prepare_services(settings: Settings) -> Services:
     except ProfileError as exc:
         raise StartupError(str(exc)) from None
 
-    engine = make_engine(settings.database_url)
+    session_factory = make_session_factory(make_engine(settings.database_url))
+    with unit_of_work(session_factory) as repos:
+        user = repos.users.get_or_create(profile.identity.name)
+        user_id, chosen_language = user.id, user.language
     return Services(
         settings=settings,
         profile=profile,
         translator=Translator.from_directory(default_locale=profile.identity.language),
-        session_factory=make_session_factory(engine),
+        session_factory=session_factory,
+        user_id=user_id,
+        chosen_language=chosen_language,
     )
+
+
+async def _post_init(application: Application) -> None:
+    """Runs once the bot is connected, before polling starts."""
+    services = application.bot_data[SERVICES_KEY]
+    await sync_menus(
+        application.bot,
+        services.translator,
+        services.settings.allowed_chat_ids,
+        services.locale,
+    )
+    logger.info("Kide is running. Language: %s. Press Ctrl+C to stop.", services.locale)
 
 
 def build_application(services: Services) -> Application:
     token = services.settings.telegram_bot_token
     assert token is not None  # checked by prepare_services
-    application = ApplicationBuilder().token(token.get_secret_value()).build()
+    application = ApplicationBuilder().token(token.get_secret_value()).post_init(_post_init).build()
     application.bot_data[SERVICES_KEY] = services
 
     application.add_handler(make_auth_guard(services.settings.allowed_chat_ids), group=-1)
-    commands.register(application)
+    commands.register(application, services)
     return application
 
 
