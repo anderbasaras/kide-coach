@@ -39,6 +39,18 @@ def _db_upgrade(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run(_args: argparse.Namespace) -> int:
+    # Imported here so that `kide db` and `kide profile` do not load the Telegram stack.
+    from kide.bot.app import StartupError, run
+
+    try:
+        run()
+    except StartupError as exc:
+        print(f"kide run: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="kide", description="Kide hybrid training coach.")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -56,6 +68,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     upgrade.add_argument("--url", help="defaults to DATABASE_URL ($DATA_DIR/kide.db)")
     upgrade.set_defaults(handler=_db_upgrade)
+
+    run = commands.add_parser("run", help="start the Telegram bot (long polling)")
+    run.set_defaults(handler=_run)
 
     return parser
 

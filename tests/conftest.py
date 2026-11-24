@@ -59,6 +59,12 @@ _BASE: dict[str, Any] = {
 
 
 @pytest.fixture
+def anyio_backend() -> str:
+    """Async tests (``@pytest.mark.anyio``) run on asyncio, like python-telegram-bot."""
+    return "asyncio"
+
+
+@pytest.fixture
 def profile_data() -> dict[str, Any]:
     """A valid profile as a plain dict; tests mutate their own copy."""
     return copy.deepcopy(_BASE)

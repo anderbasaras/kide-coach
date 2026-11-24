@@ -9,6 +9,9 @@ common:
   confirm: Confirmar
   edit: Corregir
 
+start:
+  greeting: "Hola, {name}. Soy Kide, tu entrenador híbrido."
+
 checkin:
   question: ¿Qué toca hoy?
   next_session: "Siguiente en tu rotación: {session}"

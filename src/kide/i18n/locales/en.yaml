@@ -10,6 +10,9 @@ common:
   confirm: Confirm
   edit: Edit
 
+start:
+  greeting: "Hi {name}, I'm Kide, your hybrid training coach."
+
 checkin:
   question: What's on today?
   next_session: "Next in your rotation: {session}"
