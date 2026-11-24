@@ -133,3 +133,18 @@ async def test_spanish_and_english_command_names_both_work(app, api):
     await feed(application, message_update(text="/help"))
     first, second = texts(api)
     assert first == second
+
+
+@pytest.mark.anyio
+async def test_real_job_queue_gets_the_daily_and_backup_jobs(app, api):
+    from kide.bot import scheduler
+
+    application, services = app
+    await scheduler.start_checkin_jobs(application.bot, application.job_queue, services)
+    (daily,) = application.job_queue.get_jobs_by_name(scheduler.DAILY_JOB)
+    (backup,) = application.job_queue.get_jobs_by_name(scheduler.BACKUP_JOB)
+    assert daily.job.misfire_grace_time is None
+    assert daily.next_t == scheduler.next_checkin_at(
+        services.clock(), services.profile.schedule.checkin_time, services.tz
+    )
+    assert backup.next_t is not None

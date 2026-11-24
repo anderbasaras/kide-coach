@@ -19,6 +19,7 @@ from telegram.ext import Application, ApplicationBuilder
 from kide.bot.auth import make_auth_guard
 from kide.bot.handlers import checkin, commands
 from kide.bot.menu import sync_menus
+from kide.bot.scheduler import start_checkin_jobs
 from kide.bot.services import SERVICES_KEY, Services
 from kide.config import ConfigError, Settings, get_settings
 from kide.i18n import Translator
@@ -95,6 +96,11 @@ async def _post_init(application: Application) -> None:
         services.settings.allowed_chat_ids,
         services.locale,
     )
+    if application.job_queue is None:  # pragma: no cover - dependency problem
+        raise StartupError(
+            "JobQueue is not available: install python-telegram-bot[job-queue] (uv sync)."
+        )
+    await start_checkin_jobs(application.bot, application.job_queue, services)
     logger.info("Kide is running. Language: %s. Press Ctrl+C to stop.", services.locale)
 
 
