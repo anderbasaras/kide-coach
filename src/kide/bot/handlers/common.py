@@ -40,8 +40,13 @@ def describe_session(services: Services, training: TrainingSession) -> str:
             photos=len(training.photos),
             text=yes_no(services, bool(training.raw_input)),
         )
+    photos = len(training.photos)
+    if training.notes and photos:
+        return services.t("checkin.summary_note_photos", choice=label, photos=photos)
     if training.notes:
         return services.t("checkin.summary_note", choice=label)
+    if photos:
+        return services.t("checkin.summary_photos", choice=label, photos=photos)
     return services.t("checkin.summary_plain", choice=label)
 
 

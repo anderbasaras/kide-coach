@@ -40,6 +40,7 @@ common:
   edit: Corregir
 
 checkin:
+  reminder: "Recordatorio: todavía no me has dicho qué toca hoy."
   question: ¿Qué toca hoy?
   next_session: "Siguiente en tu rotación: {session}"
   options:
@@ -54,6 +55,8 @@ checkin:
   invalid_button: "Ese botón ya no vale. Escribe /{today} para empezar de nuevo."
   summary_box: "{choice} (fotos: {photos}, texto: {text})"
   summary_note: "{choice} (con nota)"
+  summary_photos: "{choice} (fotos: {photos})"
+  summary_note_photos: "{choice} (con nota, fotos: {photos})"
   summary_plain: "{choice}"
 
 wod:
@@ -71,11 +74,14 @@ wod:
   photo_failed: No he podido guardar esa foto. Vuelve a mandarla.
 
 note:
-  ask: "{choice} apuntado. ¿Quieres añadir una nota? Escríbela o pulsa «Sin nota»."
+  ask: >-
+    {choice} apuntado. ¿Quieres añadir algo? Escribe una nota o manda una captura
+    (Strava, el reloj...), o pulsa «Sin nota».
   skip_button: Sin nota
-  saved: "Guardado: {choice}."
-  saved_with_note: "Guardado: {choice}, con tu nota."
-  unsupported: Escribe la nota como texto o pulsa «Sin nota».
+  done_button: Listo
+  photo_received: "Captura guardada. Fotos: {photos}. Escribe una nota o pulsa «Listo»."
+  saved: "Guardado: {summary}."
+  unsupported: Escribe la nota como texto, manda una captura o pulsa «Sin nota».
 
 day:
   fix_button: Corregir

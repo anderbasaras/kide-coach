@@ -41,6 +41,7 @@ common:
   edit: Edit
 
 checkin:
+  reminder: "Reminder: you haven't told me what's on today yet."
   question: What's on today?
   next_session: "Next in your rotation: {session}"
   options:
@@ -55,6 +56,8 @@ checkin:
   invalid_button: "That button is no longer valid. Send /{today} to start again."
   summary_box: "{choice} (photos: {photos}, text: {text})"
   summary_note: "{choice} (with a note)"
+  summary_photos: "{choice} (photos: {photos})"
+  summary_note_photos: "{choice} (with a note, photos: {photos})"
   summary_plain: "{choice}"
 
 wod:
@@ -72,11 +75,14 @@ wod:
   photo_failed: I couldn't save that photo. Please send it again.
 
 note:
-  ask: "{choice} logged. Want to add a note? Write it, or tap “No note”."
+  ask: >-
+    {choice} logged. Want to add something? Write a note or send a screenshot
+    (Strava, your watch...), or tap “No note”.
   skip_button: No note
-  saved: "Saved: {choice}."
-  saved_with_note: "Saved: {choice}, with your note."
-  unsupported: Write the note as text, or tap “No note”.
+  done_button: Done
+  photo_received: "Screenshot saved. Photos: {photos}. Write a note or tap “Done”."
+  saved: "Saved: {summary}."
+  unsupported: Write the note as text, send a screenshot, or tap “No note”.
 
 day:
   fix_button: Correct

@@ -7,7 +7,8 @@ Flow (ConversationHandler, one per chat and user):
 - Correct / Add session (see ``day_edit``) are entry points too.
 - Box -> ``Flow.WOD``: every text and photo is saved as it arrives (albums included)
   until "Done".
-- Gym / Rest / Other -> ``Flow.NOTE``: one optional note, or "No note".
+- Gym / Rest / Other -> ``Flow.NOTE``: optional screenshots (Strava, the watch...) and
+  one optional note, or "No note".
 
 Everything is saved step by step, so nothing is lost if the bot restarts in the middle;
 the conversation state itself is not persisted (D-029). "Done" and "No note" also work
@@ -38,6 +39,7 @@ from kide.bot.handlers.common import (
     SESSION_KEY,
     choice_label,
     describe_day,
+    describe_session,
     enter_flow,
     format_day,
     remove_buttons,
@@ -113,7 +115,12 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             reply_markup=day_edit.day_keyboard(services, day),
         )
         return
-    await send_checkin_question(context.bot, services, chat.id, day)
+    sent = await send_checkin_question(context.bot, services, chat.id, day)
+    if sent and context.job_queue is not None:
+        # Imported here: the scheduler module imports this one.
+        from kide.bot.scheduler import schedule_reminder
+
+        schedule_reminder(context.job_queue, services)
 
 
 # --- Choosing an option --------------------------------------------------------------
@@ -192,11 +199,37 @@ async def send_wod_ack(bot: Bot, services: Services, chat_id: int, session_id: i
     )
 
 
+async def send_note_photo_ack(bot: Bot, services: Services, chat_id: int, session_id: int) -> None:
+    status = _wod_status(services, session_id)
+    if status is None:
+        return
+    await bot.send_message(
+        chat_id=chat_id,
+        text=services.t("note.photo_received", photos=status[0]),
+        reply_markup=single_button(services.t("note.done_button"), NOTE_SKIP_PREFIX, session_id),
+    )
+
+
+async def _send_photo_ack(
+    bot: Bot, services: Services, chat_id: int, session_id: int, flow: Flow
+) -> None:
+    if flow is Flow.WOD:
+        await send_wod_ack(bot, services, chat_id, session_id)
+    else:
+        await send_note_photo_ack(bot, services, chat_id, session_id)
+
+
 async def _album_ack_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     job = context.job
-    if job is None or job.chat_id is None or not isinstance(job.data, int):
+    if job is None or job.chat_id is None or not isinstance(job.data, dict):
         return
-    await send_wod_ack(context.bot, get_services(context), job.chat_id, job.data)
+    await _send_photo_ack(
+        context.bot,
+        get_services(context),
+        job.chat_id,
+        job.data["session_id"],
+        Flow(job.data["flow"]),
+    )
 
 
 async def wod_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -214,7 +247,8 @@ async def wod_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return Flow.WOD
 
 
-async def wod_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def _receive_photo(update: Update, context: ContextTypes.DEFAULT_TYPE, flow: Flow) -> int:
+    """Store an image for the open session (the WOD whiteboard, a Strava screenshot...)."""
     services = get_services(context)
     message = update.effective_message
     session_id = _open_session_id(context)
@@ -222,7 +256,7 @@ async def wod_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return ConversationHandler.END
     found = best_image(message)
     if found is None:
-        return Flow.WOD
+        return flow
     image, extension = found
 
     with unit_of_work(services.session_factory) as repos:
@@ -230,18 +264,18 @@ async def wod_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         if training is None:
             return ConversationHandler.END
         if repos.sessions.has_photo(training, image.file_unique_id):
-            return Flow.WOD  # same file delivered twice
+            return flow  # same file delivered twice
         relative = relative_photo_path(training.date, session_id, image.file_unique_id, extension)
 
     try:
         await download_image(image, services.data_dir, relative)
     except PhotoTooLargeError:
         await message.reply_text(services.t("wod.photo_too_large"))
-        return Flow.WOD
+        return flow
     except (TelegramError, OSError) as exc:
         logger.warning("Could not download a photo for session %s: %s", session_id, exc)
         await message.reply_text(services.t("wod.photo_failed"))
-        return Flow.WOD
+        return flow
 
     with unit_of_work(services.session_factory) as repos:
         training = repos.sessions.get(session_id)
@@ -251,15 +285,28 @@ async def wod_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             )
 
     if message.media_group_id and context.job_queue is not None:
-        name = f"wod-ack:{message.chat_id}:{message.media_group_id}"
+        name = f"photo-ack:{message.chat_id}:{message.media_group_id}"
         for job in context.job_queue.get_jobs_by_name(name):
             job.schedule_removal()
         context.job_queue.run_once(
-            _album_ack_job, ALBUM_ACK_DELAY_S, data=session_id, chat_id=message.chat_id, name=name
+            _album_ack_job,
+            ALBUM_ACK_DELAY_S,
+            data={"session_id": session_id, "flow": int(flow)},
+            chat_id=message.chat_id,
+            name=name,
         )
     else:
-        await send_wod_ack(context.bot, services, message.chat_id, session_id)
-    return Flow.WOD
+        await _send_photo_ack(context.bot, services, message.chat_id, session_id, flow)
+    return flow
+
+
+async def wod_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    return await _receive_photo(update, context, Flow.WOD)
+
+
+async def note_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Gym / rest / other also take screenshots (Strava, the watch, a notebook page)."""
+    return await _receive_photo(update, context, Flow.NOTE)
 
 
 async def wod_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -296,12 +343,12 @@ async def wod_unsupported(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 # --- Gym / Rest / Other: optional note -----------------------------------------------
 
 
-def _session_label(services: Services, session_id: int | None) -> str | None:
+def _session_summary(services: Services, session_id: int | None) -> str | None:
     if session_id is None:
         return None
     with unit_of_work(services.session_factory) as repos:
         training = repos.sessions.get(session_id)
-        return choice_label(services, training.type) if training else None
+        return describe_session(services, training) if training else None
 
 
 async def note_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -315,14 +362,14 @@ async def note_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         if training is None:
             return ConversationHandler.END
         repos.sessions.set_note(training, message.text)
-        label = choice_label(services, training.type)
+        summary = describe_session(services, training)
     context.user_data.pop(SESSION_KEY, None)
-    await message.reply_text(services.t("note.saved_with_note", choice=label))
+    await message.reply_text(services.t("note.saved", summary=summary))
     return ConversationHandler.END
 
 
 async def note_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """'No note'. Also works after a restart, outside the conversation."""
+    """'No note' / 'Done'. Also works after a restart, outside the conversation."""
     query = update.callback_query
     chat = update.effective_chat
     if query is None or chat is None:
@@ -332,9 +379,11 @@ async def note_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await remove_buttons(query.message)
     if context.user_data is not None:
         context.user_data.pop(SESSION_KEY, None)
-    label = _session_label(services, parse_session_id(query.data, NOTE_SKIP_PREFIX))
-    if label:
-        await context.bot.send_message(chat_id=chat.id, text=services.t("note.saved", choice=label))
+    summary = _session_summary(services, parse_session_id(query.data, NOTE_SKIP_PREFIX))
+    if summary:
+        await context.bot.send_message(
+            chat_id=chat.id, text=services.t("note.saved", summary=summary)
+        )
     return ConversationHandler.END
 
 
@@ -367,6 +416,7 @@ def build_conversation() -> ConversationHandler:
                 ],
                 Flow.NOTE: [
                     MessageHandler(NEW_MESSAGE & filters.TEXT, note_text),
+                    MessageHandler(NEW_MESSAGE & IMAGE, note_photo),
                     CallbackQueryHandler(note_skip, pattern=f"^{NOTE_SKIP_PREFIX}:"),
                     MessageHandler(NEW_MESSAGE, note_unsupported),
                 ],

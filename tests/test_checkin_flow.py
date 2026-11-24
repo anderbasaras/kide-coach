@@ -55,11 +55,11 @@ async def test_gym_with_a_note(chat, services):
     state = await chat.tap(flow.choice_made, f"ci:{TODAY}:gym")
     assert state is Flow.NOTE
     assert chat.bot.edit_message_text.await_args.kwargs["text"] == "Hoy: Gimnasio"
-    assert "¿Quieres añadir una nota?" in chat.texts()[-1]
+    assert "Escribe una nota o manda una captura" in chat.texts()[-1]
 
     state = await chat.send(flow.note_text, message_update(text="  Pierna cargada del lunes "))
     assert state == ConversationHandler.END
-    assert chat.texts()[-1] == "Guardado: Gimnasio, con tu nota."
+    assert chat.texts()[-1] == "Guardado: Gimnasio (con nota)."
     sessions, checkin = day_sessions(services)
     assert sessions == [(DayType.GYM, None, "Pierna cargada del lunes", [])]
     assert checkin.choice is DayType.GYM
@@ -78,6 +78,36 @@ async def test_rest_and_other_without_note(chat, services, choice, label):
     sessions, _ = day_sessions(services)
     assert sessions == [(DayType(choice), None, None, [])]
     assert flow.SESSION_KEY not in chat.user_data
+
+
+@pytest.mark.anyio
+async def test_other_with_a_strava_screenshot_and_a_note(chat, services):
+    await chat.tap(flow.choice_made, f"ci:{TODAY}:other")
+    session_id = chat.user_data[flow.SESSION_KEY]
+
+    assert await chat.send(flow.note_photo, photo_update("STRAVA1")) is Flow.NOTE
+    assert chat.texts()[-1] == "Captura guardada. Fotos: 1. Escribe una nota o pulsa «Listo»."
+    done = chat.bot.send_message.await_args.kwargs["reply_markup"].inline_keyboard[0][0]
+    assert (done.text, done.callback_data) == ("Listo", f"note:{session_id}")
+
+    await chat.send(flow.note_text, message_update(text="Rodaje suave 8 km"))
+    assert chat.texts()[-1] == "Guardado: Otro (con nota, fotos: 1)."
+    sessions, _ = day_sessions(services)
+    expected = f"photos/2026/11/2026-11-23_s{session_id}_STRAVA1.jpg"
+    assert sessions == [(DayType.OTHER, None, "Rodaje suave 8 km", [expected])]
+
+
+@pytest.mark.anyio
+async def test_rest_with_watch_screenshots_only(chat, services):
+    await chat.tap(flow.choice_made, f"ci:{TODAY}:rest")
+    session_id = chat.user_data[flow.SESSION_KEY]
+    for unique_id in ("SLEEP1", "SLEEP2"):
+        await chat.send(flow.note_photo, photo_update(unique_id, media_group_id="watch"))
+    job_call = chat.job_queue.run_once.call_args
+    assert job_call.kwargs["data"] == {"session_id": session_id, "flow": int(Flow.NOTE)}
+
+    await chat.tap(flow.note_skip, f"note:{session_id}")
+    assert chat.texts()[-1] == "Guardado: Descanso (fotos: 2)."
 
 
 # --- Box -------------------------------------------------------------------------------
@@ -243,5 +273,7 @@ def test_routing_while_waiting_for_the_wod():
 def test_routing_while_waiting_for_a_note():
     assert route(Flow.NOTE, message_update(text="tired")) is flow.note_text
     assert route(Flow.NOTE, callback_update(data="note:1")) is flow.note_skip
-    assert route(Flow.NOTE, photo_update()) is flow.note_unsupported
+    assert route(Flow.NOTE, photo_update()) is flow.note_photo
+    assert route(Flow.NOTE, document_update()) is flow.note_photo
+    assert route(Flow.NOTE, sticker_update()) is flow.note_unsupported
     assert route(Flow.NOTE, message_update(text="/hoy")) is None
