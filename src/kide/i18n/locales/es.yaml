@@ -101,6 +101,15 @@ day:
 formats:
   date: "%d/%m/%Y"
 
+fallback:
+  edited: No proceso mensajes editados. Manda el cambio en un mensaje nuevo.
+  photo: "Para guardar una foto, elige primero la sesión con /{today} (o «Añadir sesión»)."
+  text: >-
+    Todavía no sé conversar: llegará pronto. De momento, escribe /{today} para
+    apuntar tu día o /{help} para ver qué puedo hacer.
+  unknown_command: "No conozco ese comando. Escribe /{help} para ver los míos."
+  unsupported: "No puedo usar ese tipo de mensaje. Escribe /{today} para apuntar tu día o /{help} para ver la ayuda."
+
 errors:
   generic: Algo ha fallado. Vuelve a intentarlo en un momento.
   profile_invalid: "Tu perfil tiene errores y no se ha podido cargar:\n{details}"

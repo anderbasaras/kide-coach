@@ -13,8 +13,12 @@ from tests.bot_helpers import make_services
 from tests.telegram_factories import (
     STRANGER_CHAT,
     callback_update,
+    document_update,
+    edited_update,
     message_update,
     photo_update,
+    sticker_update,
+    voice_update,
 )
 
 
@@ -63,7 +67,7 @@ async def app(tmp_path, profile_data, api):
 
 async def feed(application, update):
     update.set_bot(application.bot)
-    for obj in (update.message, update.callback_query):
+    for obj in (update.message, update.edited_message, update.callback_query):
         if obj is not None:
             obj.set_bot(application.bot)
             if getattr(obj, "message", None) is not None:
@@ -172,3 +176,55 @@ async def test_correcting_while_a_flow_is_still_open(app, api):
         assert training.type is DayType.BOX
         assert training.raw_input == "For time: 50 cal row"
         assert training.notes is None  # the text went to the WOD, not to a gym note
+
+
+# --- Unusual messages and errors (step 8) -------------------------------------------------
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("factory", "expected"),
+    [
+        (sticker_update, "No puedo usar ese tipo de mensaje"),
+        (voice_update, "No puedo usar ese tipo de mensaje"),
+        (lambda: document_update(mime_type="application/pdf"), "No puedo usar ese tipo"),
+        (edited_update, "No proceso mensajes editados"),
+        (lambda: message_update(text="hola, ¿qué tal?"), "Todavía no sé conversar"),
+        (lambda: message_update(text="/foo"), "No conozco ese comando. Escribe /ayuda"),
+        (lambda: photo_update("LOOSE"), "elige primero la sesión con /hoy"),
+    ],
+)
+async def test_unusual_messages_get_a_help_text(app, api, factory, expected):
+    application, services = app
+    await feed(application, factory())
+    assert expected in texts(api)[-1]
+    with unit_of_work(services.session_factory) as repos:  # nothing is stored
+        assert repos.sessions.for_day(services.user_id, services.clock().date()) == []
+
+
+@pytest.mark.anyio
+async def test_old_buttons_only_stop_the_spinner(app, api):
+    application, _ = app
+    await feed(application, callback_update(data="from-an-old-version:1"))
+    assert texts(api) == []
+    api.answer_callback_query.assert_awaited()
+
+
+@pytest.mark.anyio
+async def test_a_failing_handler_does_not_stop_the_bot(app, api, monkeypatch, caplog):
+    from kide.bot.handlers import commands
+
+    application, _ = app
+
+    def broken(services):
+        raise RuntimeError("boom")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(commands, "help_text", broken)
+        await feed(application, message_update(text="/ayuda secreto"))
+    assert texts(api)[-1] == "Algo ha fallado. Vuelve a intentarlo en un momento."
+    assert "Error handling update=message" in caplog.text
+    assert "secreto" not in caplog.text  # the message content is never logged
+
+    await feed(application, message_update(text="/ayuda"))  # still answering
+    assert "Estos son mis comandos" in texts(api)[-1]

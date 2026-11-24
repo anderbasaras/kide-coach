@@ -4,7 +4,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)
 
-> **Status: work in progress.** Kide is not usable yet. This README will grow with the project.
+> **Status: work in progress.** The bot runs and logs your day (check-in, box WODs as text or
+> photos, notes and screenshots), without AI yet. This README will grow with the project.
 
 Kide (*"companion"* in Basque) is a self-hosted, open-source **hybrid training coach that lives in
 Telegram**. It is built for people who combine gym training (hypertrophy / strength) with classes at
@@ -72,6 +73,62 @@ uv run kide db upgrade
 ```
 
 The schema is versioned with Alembic, so upgrades never require deleting your data.
+
+## Running the bot (development)
+
+### 1. Create your bot
+
+1. In Telegram, open **@BotFather** (check the blue verified badge) and send `/newbot`.
+2. Choose a display name (e.g. `Kide`) and a username ending in `bot`. You can change the
+   display name later with `/setname`.
+3. Copy the token. It is a password: keep it only in your `.env` (`/revoke` gives you a new one).
+4. Send `/setjoingroups`, pick your bot and choose **Disable**, so nobody can add it to a group.
+
+### 2. Configure and find your chat id
+
+```bash
+cp .env.example .env    # Windows PowerShell: Copy-Item .env.example .env
+```
+
+Set `TELEGRAM_BOT_TOKEN`, and set `ALLOWED_CHAT_IDS=1` for now (an id that belongs to nobody).
+Then run the bot and write anything to it from your phone:
+
+```bash
+uv run kide run
+```
+
+The bot does not answer chats that are not allowed. It logs them, without their content:
+
+```text
+WARNING  kide.bot.auth: Ignored update from unauthorized chat: chat_id=123456789 chat_type=private update=message
+```
+
+Stop the bot (Ctrl+C), put that number in `ALLOWED_CHAT_IDS` and start it again. Several ids
+can be separated by commas; the first one receives the scheduled check-in.
+
+### 3. Use it
+
+`kide run` checks your settings, creates or upgrades the database and validates your profile
+before connecting; any problem is reported in one line.
+
+| Command | Spanish alias | What it does |
+|---|---|---|
+| `/today` | `/hoy` | "What's on today?": Gym / Box / Rest / Other. On an answered day: correct it or add a session |
+| `/help` | `/ayuda` | List of commands |
+| `/language` | `/idioma` | Switch between English and Spanish (overrides the profile, kept after restarts) |
+| `/start` | | Greeting, profile check and medical disclaimer |
+
+- **Daily check-in** at `schedule.checkin_time`, in `identity.timezone` (daylight saving
+  changes included). One per day: it is not repeated after a restart, and if the bot starts
+  after that time it asks once.
+- **Box**: send the WOD as text and/or one or more photos (albums and images sent as files
+  too), then tap *Done*.
+- **Gym / Rest / Other**: an optional note and optional screenshots (Strava, your watch...).
+- **Optional reminder** if the check-in gets no answer: `schedule.checkin_reminder` in the
+  profile (off by default).
+
+Everything stays on your computer: the database is `$DATA_DIR/kide.db` and photos go to
+`$DATA_DIR/photos/YYYY/MM/` (`./var/` by default). Nothing is sent to any AI service yet.
 
 ## Development
 

@@ -102,6 +102,15 @@ day:
 formats:
   date: "%Y-%m-%d"
 
+fallback:
+  edited: I don't process edited messages. Send the change as a new message.
+  photo: "To save a photo, first choose the session with /{today} (or “Add session”)."
+  text: >-
+    I can't chat yet: that arrives soon. For now, send /{today} to log your day
+    or /{help} to see what I can do.
+  unknown_command: "I don't know that command. Send /{help} to see mine."
+  unsupported: "I can't use that kind of message. Send /{today} to log your day or /{help} for help."
+
 errors:
   generic: Something went wrong. Please try again in a moment.
   profile_invalid: "Your profile has errors and could not be loaded:\n{details}"

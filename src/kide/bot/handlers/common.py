@@ -7,7 +7,7 @@ import logging
 
 from telegram import Bot, InlineKeyboardMarkup, Message
 from telegram.error import TelegramError
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, filters
 
 from kide.bot.keyboards import NOTE_SKIP_PREFIX, WOD_DONE_PREFIX, single_button
 from kide.bot.menu import command_name
@@ -18,6 +18,7 @@ from kide.storage.models import DayType, TrainingSession
 logger = logging.getLogger(__name__)
 
 SESSION_KEY = "kide_session_id"  # user_data: the session the open flow is filling
+IMAGE = filters.PHOTO | filters.Document.IMAGE  # photos, and images sent as files
 
 
 # --- Texts ---------------------------------------------------------------------------

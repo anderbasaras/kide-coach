@@ -17,7 +17,7 @@ from telegram.error import InvalidToken, NetworkError
 from telegram.ext import Application, ApplicationBuilder
 
 from kide.bot.auth import make_auth_guard
-from kide.bot.handlers import checkin, commands
+from kide.bot.handlers import checkin, commands, fallback
 from kide.bot.menu import sync_menus
 from kide.bot.scheduler import start_checkin_jobs
 from kide.bot.services import SERVICES_KEY, Services
@@ -113,6 +113,7 @@ def build_application(services: Services) -> Application:
     application.add_handler(make_auth_guard(services.settings.allowed_chat_ids), group=-1)
     commands.register(application, services)
     checkin.register(application, services)
+    fallback.register(application)  # last: catches what nothing else handled
     return application
 
 

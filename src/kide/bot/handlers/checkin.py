@@ -36,6 +36,7 @@ from telegram.warnings import PTBUserWarning
 
 from kide.bot.handlers import day_edit
 from kide.bot.handlers.common import (
+    IMAGE,
     SESSION_KEY,
     choice_label,
     describe_day,
@@ -72,7 +73,6 @@ CONVERSATION_TIMEOUT = dt.timedelta(hours=2)
 
 # New messages only: edited messages are not part of a flow (see fallback handlers).
 NEW_MESSAGE = filters.UpdateType.MESSAGE & ~filters.COMMAND
-IMAGE = filters.PHOTO | filters.Document.IMAGE
 
 
 # --- Sending the question ------------------------------------------------------------

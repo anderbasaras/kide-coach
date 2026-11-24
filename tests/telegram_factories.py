@@ -14,6 +14,7 @@ from telegram import (
     Sticker,
     Update,
     User,
+    Voice,
 )
 
 WHEN = dt.datetime(2026, 11, 23, 8, 0, tzinfo=dt.UTC)
@@ -98,3 +99,8 @@ def document_update(
 def sticker_update() -> Update:
     sticker = Sticker("st", "ST1", 512, 512, False, False, Sticker.REGULAR)
     return Update(update_id=6, message=message(text=None, sticker=sticker))
+
+
+def voice_update() -> Update:
+    voice = Voice("vo", "VO1", duration=3)
+    return Update(update_id=7, message=message(text=None, voice=voice))
