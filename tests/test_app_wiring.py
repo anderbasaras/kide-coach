@@ -148,3 +148,27 @@ async def test_real_job_queue_gets_the_daily_and_backup_jobs(app, api):
         services.clock(), services.profile.schedule.checkin_time, services.tz
     )
     assert backup.next_t is not None
+
+
+@pytest.mark.anyio
+async def test_correcting_while_a_flow_is_still_open(app, api):
+    """Gym is chosen and its note flow is open; Correct -> Box must open the WOD flow."""
+    application, services = app
+    day = services.clock().date()
+    await feed(application, callback_update(data=f"ci:{day}:gym"))  # note flow open
+    with unit_of_work(services.session_factory) as repos:
+        (training,) = repos.sessions.for_day(services.user_id, day)
+        session_id = training.id
+
+    await feed(application, message_update(text="/hoy"))
+    assert texts(api)[-1].startswith("Hoy ya está apuntado: Gimnasio")
+    await feed(application, callback_update(data=f"dfix:{day}"))
+    await feed(application, callback_update(data=f"fset:{session_id}:box"))
+    assert "Mándame el WOD" in texts(api)[-1]
+
+    await feed(application, message_update(text="For time: 50 cal row"))
+    with unit_of_work(services.session_factory) as repos:
+        (training,) = repos.sessions.for_day(services.user_id, day)
+        assert training.type is DayType.BOX
+        assert training.raw_input == "For time: 50 cal row"
+        assert training.notes is None  # the text went to the WOD, not to a gym note

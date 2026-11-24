@@ -4,7 +4,16 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from kide.bot.keyboards import checkin_keyboard, parse_checkin, parse_session_id, single_button
-from kide.bot.rules import AnswerVerdict, Flow, flow_after_choice, judge_answer, local_date
+from kide.bot.rules import (
+    ADD_OPTIONS,
+    AnswerVerdict,
+    Flow,
+    flow_after_choice,
+    judge_answer,
+    local_date,
+    needs_session_pick,
+    rest_to_replace,
+)
 from kide.storage import DayType
 
 MADRID = ZoneInfo("Europe/Madrid")
@@ -94,3 +103,35 @@ def test_session_buttons():
     assert parse_session_id(data, "wod") == 42
     assert parse_session_id("wod:abc", "wod") is None
     assert parse_session_id("note:42", "wod") is None
+
+
+# --- Correcting and adding sessions ----------------------------------------------------
+
+REST, GYM, BOX, OTHER = DayType.REST, DayType.GYM, DayType.BOX, DayType.OTHER
+
+
+def test_rest_cannot_be_added_as_a_second_session():
+    assert REST not in ADD_OPTIONS
+    with pytest.raises(ValueError, match="rest"):
+        rest_to_replace([BOX], REST)
+
+
+@pytest.mark.parametrize("new", [GYM, BOX])
+def test_training_replaces_a_rest_day(new):
+    assert rest_to_replace([REST], new) == 0
+    assert rest_to_replace([OTHER, REST], new) == 1  # walk + rest, then gym: rest goes
+
+
+def test_other_keeps_the_rest_as_active_rest():
+    assert rest_to_replace([REST], OTHER) is None
+
+
+@pytest.mark.parametrize("existing", [[], [BOX], [GYM, OTHER]])
+@pytest.mark.parametrize("new", [GYM, BOX, OTHER])
+def test_without_rest_sessions_are_appended(existing, new):
+    assert rest_to_replace(existing, new) is None
+
+
+def test_session_pick_only_with_several_sessions():
+    assert not needs_session_pick(1)
+    assert needs_session_pick(2)

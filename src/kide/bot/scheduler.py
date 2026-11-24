@@ -23,7 +23,8 @@ from telegram import Bot
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes, JobQueue
 
-from kide.bot.handlers.checkin import send_checkin_question, today_for
+from kide.bot.handlers.checkin import send_checkin_question
+from kide.bot.handlers.common import today_for
 from kide.bot.services import Services, get_services
 from kide.bot.timing import next_checkin_at, should_send_checkin
 from kide.storage.repositories import unit_of_work

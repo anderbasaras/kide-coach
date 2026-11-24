@@ -4,6 +4,7 @@ Flow (ConversationHandler, one per chat and user):
 
 - The question is sent by /today (or the daily job, step 5) with four buttons.
 - Tapping a button is the entry point. The choice is saved at once.
+- Correct / Add session (see ``day_edit``) are entry points too.
 - Box -> ``Flow.WOD``: every text and photo is saved as it arrives (albums included)
   until "Done".
 - Gym / Rest / Other -> ``Flow.NOTE``: one optional note, or "No note".
@@ -19,7 +20,7 @@ import datetime as dt
 import logging
 import warnings
 
-from telegram import Bot, Message, Update
+from telegram import Bot, Update
 from telegram.error import TelegramError
 from telegram.ext import (
     Application,
@@ -32,8 +33,23 @@ from telegram.ext import (
 )
 from telegram.warnings import PTBUserWarning
 
+from kide.bot.handlers import day_edit
+from kide.bot.handlers.common import (
+    SESSION_KEY,
+    choice_label,
+    describe_day,
+    enter_flow,
+    format_day,
+    remove_buttons,
+    safe_edit,
+    today_command,
+    today_for,
+    yes_no,
+)
 from kide.bot.keyboards import (
+    ADD_SET_PREFIX,
     CHECKIN_PREFIX,
+    FIX_SET_PREFIX,
     NOTE_SKIP_PREFIX,
     WOD_DONE_PREFIX,
     checkin_keyboard,
@@ -41,16 +57,14 @@ from kide.bot.keyboards import (
     parse_session_id,
     single_button,
 )
-from kide.bot.menu import command_name, command_names
+from kide.bot.menu import command_names
 from kide.bot.photos import PhotoTooLargeError, best_image, download_image, relative_photo_path
-from kide.bot.rules import AnswerVerdict, Flow, flow_after_choice, judge_answer, local_date
+from kide.bot.rules import AnswerVerdict, Flow, judge_answer
 from kide.bot.services import Services, get_services
-from kide.storage.models import DayType, TrainingSession
 from kide.storage.repositories import unit_of_work
 
 logger = logging.getLogger(__name__)
 
-SESSION_KEY = "kide_session_id"  # user_data: the session the open flow is filling
 ALBUM_ACK_DELAY_S = 1.5  # an album arrives as one message per photo: acknowledge once
 CONVERSATION_TIMEOUT = dt.timedelta(hours=2)
 
@@ -59,48 +73,7 @@ NEW_MESSAGE = filters.UpdateType.MESSAGE & ~filters.COMMAND
 IMAGE = filters.PHOTO | filters.Document.IMAGE
 
 
-# --- Texts ---------------------------------------------------------------------------
-
-
-def choice_label(services: Services, choice: DayType) -> str:
-    return services.t(f"checkin.options.{choice.value}")
-
-
-def yes_no(services: Services, value: bool) -> str:
-    return services.t("common.yes" if value else "common.no")
-
-
-def describe_session(services: Services, training: TrainingSession) -> str:
-    label = choice_label(services, training.type)
-    if training.type is DayType.BOX:
-        return services.t(
-            "checkin.summary_box",
-            choice=label,
-            photos=len(training.photos),
-            text=yes_no(services, bool(training.raw_input)),
-        )
-    if training.notes:
-        return services.t("checkin.summary_note", choice=label)
-    return services.t("checkin.summary_plain", choice=label)
-
-
-def describe_day(services: Services, sessions: list[TrainingSession]) -> str:
-    return " + ".join(describe_session(services, training) for training in sessions)
-
-
-def format_day(services: Services, day: dt.date) -> str:
-    return day.strftime(services.t("formats.date"))
-
-
-def today_command(services: Services) -> str:
-    return command_name(services.translator, "today", services.locale)
-
-
 # --- Sending the question ------------------------------------------------------------
-
-
-def today_for(services: Services) -> dt.date:
-    return local_date(services.clock(), services.tz)
 
 
 async def send_checkin_question(bot: Bot, services: Services, chat_id: int, day: dt.date) -> bool:
@@ -135,22 +108,15 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         sessions = repos.sessions.for_day(services.user_id, day)
         summary = describe_day(services, sessions) if sessions else None
     if summary:
-        await message.reply_text(services.t("checkin.already_answered", summary=summary))
+        await message.reply_text(
+            services.t("checkin.already_answered", summary=summary),
+            reply_markup=day_edit.day_keyboard(services, day),
+        )
         return
     await send_checkin_question(context.bot, services, chat.id, day)
 
 
 # --- Choosing an option --------------------------------------------------------------
-
-
-async def _safe_edit(message: Message | None, text: str) -> None:
-    """Replace the question with the answer; old messages may no longer be editable."""
-    if message is None:
-        return
-    try:
-        await message.edit_text(text)
-    except TelegramError as exc:
-        logger.debug("Could not edit the check-in message: %s", exc)
 
 
 async def choice_made(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -192,26 +158,9 @@ async def choice_made(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         if day == today_day
         else services.t("checkin.chosen_on", date=format_day(services, day), choice=label)
     )
-    await _safe_edit(query.message if isinstance(query.message, Message) else None, answered)
+    await safe_edit(query.message, answered)
     logger.info("Check-in answered for %s: %s", day, choice.value)
-
-    context.user_data[SESSION_KEY] = session_id
-    flow = flow_after_choice(choice)
-    if flow is Flow.WOD:
-        await context.bot.send_message(
-            chat_id=chat.id,
-            text=services.t("wod.ask"),
-            reply_markup=single_button(services.t("wod.done_button"), WOD_DONE_PREFIX, session_id),
-        )
-    else:
-        await context.bot.send_message(
-            chat_id=chat.id,
-            text=services.t("note.ask", choice=label),
-            reply_markup=single_button(
-                services.t("note.skip_button"), NOTE_SKIP_PREFIX, session_id
-            ),
-        )
-    return flow
+    return await enter_flow(context.bot, context, services, chat.id, session_id, choice)
 
 
 def _open_session_id(context: ContextTypes.DEFAULT_TYPE) -> int | None:
@@ -323,7 +272,7 @@ async def wod_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await query.answer()
     session_id = parse_session_id(query.data, WOD_DONE_PREFIX)
     status = _wod_status(services, session_id) if session_id is not None else None
-    await _remove_buttons(query.message)
+    await remove_buttons(query.message)
     if context.user_data is not None:
         context.user_data.pop(SESSION_KEY, None)
     if status is None:
@@ -380,7 +329,7 @@ async def note_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return ConversationHandler.END
     services = get_services(context)
     await query.answer()
-    await _remove_buttons(query.message)
+    await remove_buttons(query.message)
     if context.user_data is not None:
         context.user_data.pop(SESSION_KEY, None)
     label = _session_label(services, parse_session_id(query.data, NOTE_SKIP_PREFIX))
@@ -395,15 +344,6 @@ async def note_unsupported(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     return Flow.NOTE
 
 
-async def _remove_buttons(message: object) -> None:
-    if not isinstance(message, Message):
-        return
-    try:
-        await message.edit_reply_markup(reply_markup=None)
-    except TelegramError as exc:
-        logger.debug("Could not remove the buttons: %s", exc)
-
-
 # --- Wiring ----------------------------------------------------------------------------
 
 
@@ -412,7 +352,12 @@ def build_conversation() -> ConversationHandler:
         # per_message=False is intended: the flow mixes buttons and messages, per chat/user.
         warnings.filterwarnings("ignore", category=PTBUserWarning, message=".*per_message.*")
         return ConversationHandler(
-            entry_points=[CallbackQueryHandler(choice_made, pattern=f"^{CHECKIN_PREFIX}:")],
+            entry_points=[
+                CallbackQueryHandler(choice_made, pattern=f"^{CHECKIN_PREFIX}:"),
+                # Correcting a session or adding one also opens its flow.
+                CallbackQueryHandler(day_edit.fix_set, pattern=f"^{FIX_SET_PREFIX}:"),
+                CallbackQueryHandler(day_edit.add_set, pattern=f"^{ADD_SET_PREFIX}:"),
+            ],
             states={
                 Flow.WOD: [
                     MessageHandler(NEW_MESSAGE & filters.TEXT, wod_text),
@@ -439,3 +384,4 @@ def register(application: Application, services: Services) -> None:
     # Buttons tapped after a restart, when the conversation is no longer open.
     application.add_handler(CallbackQueryHandler(wod_done, pattern=f"^{WOD_DONE_PREFIX}:"))
     application.add_handler(CallbackQueryHandler(note_skip, pattern=f"^{NOTE_SKIP_PREFIX}:"))
+    day_edit.register(application)

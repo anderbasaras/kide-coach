@@ -72,3 +72,30 @@ def profile_data() -> dict[str, Any]:
 
 def exercise(data: dict[str, Any], session: int = 0, index: int = 0) -> dict[str, Any]:
     return data["training"]["rotation"][session]["exercises"][index]
+
+
+@pytest.fixture
+def services(tmp_path, profile_data):
+    """Bot services in Spanish on a temporary database (clock fixed at ``NOW``)."""
+    from tests.bot_helpers import make_services
+
+    profile_data["identity"]["language"] = "es"
+    return make_services(tmp_path, profile_data)
+
+
+@pytest.fixture
+def bot():
+    """A mocked Bot whose file downloads write a small fake image."""
+    from tests.bot_helpers import fake_downloads, make_bot
+
+    mocked = make_bot()
+    fake_downloads(mocked)
+    return mocked
+
+
+@pytest.fixture
+def chat(services, bot):
+    """One user talking to the bot (keeps user_data between updates)."""
+    from tests.bot_helpers import Chat
+
+    return Chat(services, bot)

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 import enum
+from collections.abc import Sequence
 from zoneinfo import ZoneInfo
 
 from kide.storage.models import DayType
@@ -52,3 +53,32 @@ def judge_answer(button_day: dt.date, today: dt.date, already_answered: bool) ->
     if already_answered:
         return AnswerVerdict.ALREADY_ANSWERED
     return AnswerVerdict.ACCEPT
+
+
+# --- Correcting a day and adding sessions ---------------------------------------------
+
+# A second session can be gym, box or other; "rest" is only reachable by correcting.
+ADD_OPTIONS = (DayType.GYM, DayType.BOX, DayType.OTHER)
+TRAINING_TYPES = frozenset({DayType.GYM, DayType.BOX})
+
+
+def rest_to_replace(existing: Sequence[DayType], new: DayType) -> int | None:
+    """Index of the rest session that a new session replaces, or None to append it.
+
+    Gym or box on a day logged as rest contradicts it, so the rest is replaced. Other
+    (a walk, a hike) keeps the rest: that is active rest, and the engine tells them
+    apart later.
+    """
+    if new not in ADD_OPTIONS:
+        raise ValueError(f"{new.value} cannot be added as a second session")
+    if new not in TRAINING_TYPES:
+        return None
+    for index, day_type in enumerate(existing):
+        if day_type is DayType.REST:
+            return index
+    return None
+
+
+def needs_session_pick(session_count: int) -> bool:
+    """With one session, "Correct" goes straight to it; with several, the user picks."""
+    return session_count > 1

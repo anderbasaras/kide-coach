@@ -20,9 +20,10 @@ from kide.i18n import Translator
 from kide.profile import Profile
 from kide.storage import make_engine, make_session_factory, upgrade_database
 from kide.storage.repositories import unit_of_work
-from tests.telegram_factories import ALLOWED_CHAT
+from tests.telegram_factories import ALLOWED_CHAT, callback_update
 
 NOW = dt.datetime(2026, 11, 23, 8, 30, tzinfo=dt.UTC)
+TODAY = dt.date(2026, 11, 23)  # NOW is 09:30 in Berlin, the time zone of the test profile
 
 
 def make_services(tmp_path, profile_data: dict[str, Any], **overrides: Any) -> Services:
@@ -118,3 +119,37 @@ def sent_texts(bot: MagicMock) -> list[str]:
         if name in ("send_message", "edit_message_text")
         for call in [SimpleNamespace(kwargs=kwargs)]
     ]
+
+
+class Chat:
+    """One user talking to the bot: keeps user_data between updates, like PTB does."""
+
+    def __init__(self, services, bot):
+        self.services = services
+        self.bot = bot
+        self.user_data: dict = {}
+        self.job_queue = MagicMock(name="job_queue")
+        self.job_queue.get_jobs_by_name.return_value = []
+
+    async def send(self, handler, update):
+        context = make_context(self.services, self.bot, self.user_data, self.job_queue)
+        return await handler(bind(update, self.bot), context)
+
+    async def tap(self, handler, data):
+        return await self.send(handler, callback_update(data=data))
+
+    def texts(self):
+        return sent_texts(self.bot)
+
+    def reset_bot(self):
+        self.bot.reset_mock()
+
+
+def day_sessions(services, day=TODAY):
+    with unit_of_work(services.session_factory) as repos:
+        sessions = repos.sessions.for_day(services.user_id, day)
+        checkin = repos.checkins.get(services.user_id, day)
+        return (
+            [(s.type, s.raw_input, s.notes, [p.path for p in s.photos]) for s in sessions],
+            checkin,
+        )

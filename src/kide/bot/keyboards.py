@@ -18,6 +18,12 @@ LANGUAGE_PREFIX = "lang"
 CHECKIN_PREFIX = "ci"  # ci:<YYYY-MM-DD>:<gym|box|rest|other>
 WOD_DONE_PREFIX = "wod"  # wod:<session id>
 NOTE_SKIP_PREFIX = "note"  # note:<session id>
+DAY_FIX_PREFIX = "dfix"  # dfix:<YYYY-MM-DD>       "Correct" on the day summary
+DAY_ADD_PREFIX = "dadd"  # dadd:<YYYY-MM-DD>       "Add session" on the day summary
+FIX_PICK_PREFIX = "fpick"  # fpick:<session id>    which session to correct
+FIX_SET_PREFIX = "fset"  # fset:<session id>:<type> the corrected type
+FIX_DELETE_PREFIX = "fdel"  # fdel:<session id>    delete that session
+ADD_SET_PREFIX = "aset"  # aset:<YYYY-MM-DD>:<type> the added session
 
 Translate = Callable[[str], str]
 MAX_CALLBACK_BYTES = 64
@@ -69,13 +75,34 @@ def checkin_keyboard(t: Translate, day: dt.date) -> InlineKeyboardMarkup:
     )
 
 
-def parse_checkin(data: str | None) -> tuple[dt.date, DayType] | None:
-    """``(day, choice)`` from check-in callback data, or ``None`` if it is not valid."""
-    parts = parse_callback(data, CHECKIN_PREFIX)
+def parse_checkin(data: str | None, prefix: str = CHECKIN_PREFIX) -> tuple[dt.date, DayType] | None:
+    """``(day, choice)`` from ``<prefix>:<date>:<type>`` data, or ``None`` if not valid."""
+    parts = parse_callback(data, prefix)
     if not parts or len(parts) != 2:
         return None
     try:
         return dt.date.fromisoformat(parts[0]), DayType(parts[1])
+    except ValueError:
+        return None
+
+
+def parse_day(data: str | None, prefix: str) -> dt.date | None:
+    parts = parse_callback(data, prefix)
+    if not parts or len(parts) != 1:
+        return None
+    try:
+        return dt.date.fromisoformat(parts[0])
+    except ValueError:
+        return None
+
+
+def parse_session_choice(data: str | None, prefix: str) -> tuple[int, DayType] | None:
+    """``(session id, type)`` from ``<prefix>:<id>:<type>`` data."""
+    parts = parse_callback(data, prefix)
+    if not parts or len(parts) != 2 or not parts[0].isdigit():
+        return None
+    try:
+        return int(parts[0]), DayType(parts[1])
     except ValueError:
         return None
 

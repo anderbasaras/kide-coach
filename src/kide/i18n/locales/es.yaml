@@ -77,6 +77,21 @@ note:
   saved_with_note: "Guardado: {choice}, con tu nota."
   unsupported: Escribe la nota como texto o pulsa «Sin nota».
 
+day:
+  fix_button: Corregir
+  add_button: Añadir sesión
+  pick_session: ¿Qué sesión quieres corregir?
+  choose_type: "{session}. Elige lo que hiciste de verdad: lo apuntado en esa sesión se sustituye."
+  delete_button: Borrar esta sesión
+  corrected: "Corregido: {old} → {new}"
+  deleted: "Sesión borrada. Queda apuntado: {summary}."
+  deleted_empty: "Sesión borrada. Ese día no queda nada apuntado: escribe /{today} para responder otra vez."
+  add_type: ¿Qué sesión añades?
+  added: "Añadida: {choice}"
+  rest_replaced: "Cambio el descanso por {choice}"
+  nothing: "Ese día no hay nada apuntado. Escribe /{today}."
+  gone: Esa sesión ya no existe.
+
 formats:
   date: "%d/%m/%Y"
 

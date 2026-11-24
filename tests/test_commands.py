@@ -5,19 +5,8 @@ from telegram.ext import ApplicationBuilder, CommandHandler
 from kide.bot.app import prepare_services
 from kide.bot.handlers import commands
 from kide.storage.repositories import unit_of_work
-from tests.bot_helpers import bind, make_bot, make_context, make_services, sent_texts
+from tests.bot_helpers import bind, make_context, sent_texts
 from tests.telegram_factories import callback_update, message_update
-
-
-@pytest.fixture
-def services(tmp_path, profile_data):
-    profile_data["identity"]["language"] = "es"
-    return make_services(tmp_path, profile_data)
-
-
-@pytest.fixture
-def bot():
-    return make_bot()
 
 
 async def call(handler, update, services, bot):

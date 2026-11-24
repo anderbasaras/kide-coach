@@ -78,6 +78,21 @@ note:
   saved_with_note: "Saved: {choice}, with your note."
   unsupported: Write the note as text, or tap “No note”.
 
+day:
+  fix_button: Correct
+  add_button: Add session
+  pick_session: Which session do you want to correct?
+  choose_type: "{session}. Choose what you actually did: what was logged for it is replaced."
+  delete_button: Delete this session
+  corrected: "Corrected: {old} → {new}"
+  deleted: "Session deleted. Logged now: {summary}."
+  deleted_empty: "Session deleted. Nothing is logged for that day: send /{today} to answer again."
+  add_type: Which session are you adding?
+  added: "Added: {choice}"
+  rest_replaced: "Rest replaced with {choice}"
+  nothing: "Nothing is logged for that day. Send /{today}."
+  gone: That session no longer exists.
+
 formats:
   date: "%Y-%m-%d"
 
