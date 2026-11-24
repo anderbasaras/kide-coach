@@ -1,1 +1,207 @@
-"""Data-access helpers used by the bot (phase 2+)."""
+"""Data access for the bot. Handlers use these classes and never touch SQLAlchemy directly.
+
+Use :func:`unit_of_work` for one transaction: it commits when the block ends and
+rolls back if it raises::
+
+    with unit_of_work(session_factory) as repos:
+        user = repos.users.get_or_create("Alex")
+        checkin = repos.checkins.get_or_create(user.id, today)
+
+Repositories only ``flush``; committing is the unit of work's job.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session, sessionmaker
+
+from kide.storage.models import DailyCheckin, DayType, SessionPhoto, TrainingSession, User
+
+TEXT_SEPARATOR = "\n\n"
+
+
+class UserRepository:
+    """The single user of this instance (D-011)."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get_or_create(self, name: str) -> User:
+        """Return the user, creating it on first run; keeps the name in sync with the profile."""
+        user = self._session.scalars(select(User).order_by(User.id).limit(1)).first()
+        if user is None:
+            user = User(name=name)
+            self._session.add(user)
+        elif user.name != name:
+            user.name = name
+        self._session.flush()
+        return user
+
+    def set_language(self, user: User, language: str | None) -> None:
+        """Store the /language choice; ``None`` goes back to the profile language."""
+        user.language = language
+        self._session.flush()
+
+
+class CheckinRepository:
+    """One ``daily_checkins`` row per user and local date."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get(self, user_id: int, day: dt.date) -> DailyCheckin | None:
+        return self._session.scalars(
+            select(DailyCheckin).where(DailyCheckin.user_id == user_id, DailyCheckin.date == day)
+        ).first()
+
+    def get_by_id(self, checkin_id: int) -> DailyCheckin | None:
+        return self._session.get(DailyCheckin, checkin_id)
+
+    def get_or_create(self, user_id: int, day: dt.date) -> DailyCheckin:
+        checkin = self.get(user_id, day)
+        if checkin is None:
+            checkin = DailyCheckin(user_id=user_id, date=day)
+            self._session.add(checkin)
+            self._session.flush()
+        return checkin
+
+    def mark_sent(self, checkin: DailyCheckin, chat_id: int, at: dt.datetime) -> None:
+        """Record the first time the question was sent; later sends keep the original time."""
+        if checkin.sent_at is None:
+            checkin.sent_at = at
+            checkin.chat_id = chat_id
+        self._session.flush()
+
+    def mark_reminded(self, checkin: DailyCheckin, at: dt.datetime) -> None:
+        checkin.reminder_sent_at = at
+        self._session.flush()
+
+    def refresh_choice(self, checkin: DailyCheckin, at: dt.datetime) -> None:
+        """Mirror the first session of the day in ``choice``; clear it if there is none."""
+        self._session.flush()
+        self._session.refresh(checkin, ["sessions"])
+        first = checkin.sessions[0] if checkin.sessions else None
+        checkin.choice = first.type if first else None
+        if first is None:
+            checkin.answered_at = None
+        elif checkin.answered_at is None:
+            checkin.answered_at = at
+        self._session.flush()
+
+
+class SessionRepository:
+    """Training sessions of a day and their photos."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def create(
+        self, checkin: DailyCheckin, day_type: DayType, raw_input: str | None = None
+    ) -> TrainingSession:
+        training = TrainingSession(
+            user_id=checkin.user_id,
+            checkin=checkin,
+            date=checkin.date,
+            type=day_type,
+            raw_input=raw_input,
+        )
+        self._session.add(training)
+        self._session.flush()
+        return training
+
+    def get(self, session_id: int) -> TrainingSession | None:
+        return self._session.get(TrainingSession, session_id)
+
+    def for_day(self, user_id: int, day: dt.date) -> list[TrainingSession]:
+        return list(
+            self._session.scalars(
+                select(TrainingSession)
+                .where(TrainingSession.user_id == user_id, TrainingSession.date == day)
+                .order_by(TrainingSession.id)
+            )
+        )
+
+    def append_text(self, training: TrainingSession, text: str) -> None:
+        """Add a message to ``raw_input`` (several WOD messages end up in one text)."""
+        text = text.strip()
+        if not text:
+            return
+        training.raw_input = (
+            f"{training.raw_input}{TEXT_SEPARATOR}{text}" if training.raw_input else text
+        )
+        self._session.flush()
+
+    def set_note(self, training: TrainingSession, note: str | None) -> None:
+        training.notes = note.strip() if note and note.strip() else None
+        self._session.flush()
+
+    def add_photo(
+        self,
+        training: TrainingSession,
+        path: str,
+        file_unique_id: str,
+        media_group_id: str | None = None,
+    ) -> SessionPhoto | None:
+        """Attach a stored photo. Returns ``None`` if this file was already attached."""
+        if self.has_photo(training, file_unique_id):
+            return None
+        photo = SessionPhoto(
+            path=path, file_unique_id=file_unique_id, media_group_id=media_group_id
+        )
+        training.photos.append(photo)
+        self._session.flush()
+        return photo
+
+    def has_photo(self, training: TrainingSession, file_unique_id: str) -> bool:
+        return any(photo.file_unique_id == file_unique_id for photo in training.photos)
+
+    def reset(self, training: TrainingSession, day_type: DayType) -> list[str]:
+        """Start the session over with a new type (correction).
+
+        Clears the text, the note and the photos. Returns the paths of the removed
+        photos so the caller can delete the files.
+        """
+        removed = [photo.path for photo in training.photos]
+        training.type = day_type
+        training.raw_input = None
+        training.notes = None
+        training.parsed_json = None
+        training.photos.clear()
+        self._session.flush()
+        return removed
+
+    def delete(self, training: TrainingSession) -> list[str]:
+        """Delete the session. Returns the paths of its photos so the files can be deleted."""
+        removed = [photo.path for photo in training.photos]
+        self._session.delete(training)
+        self._session.flush()
+        return removed
+
+
+@dataclass(frozen=True)
+class Repositories:
+    session: Session
+
+    @property
+    def users(self) -> UserRepository:
+        return UserRepository(self.session)
+
+    @property
+    def checkins(self) -> CheckinRepository:
+        return CheckinRepository(self.session)
+
+    @property
+    def sessions(self) -> SessionRepository:
+        return SessionRepository(self.session)
+
+
+@contextmanager
+def unit_of_work(factory: sessionmaker[Session]) -> Iterator[Repositories]:
+    """One transaction: commit on success, roll back on error."""
+    with factory.begin() as session:
+        yield Repositories(session)

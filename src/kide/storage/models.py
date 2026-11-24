@@ -94,6 +94,8 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100))
+    # Chosen with /language; overrides profile.identity.language when set (D-027).
+    language: Mapped[str | None] = mapped_column(String(10))
     created_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     checkins: Mapped[list[DailyCheckin]] = relationship(back_populates="user")
@@ -101,7 +103,11 @@ class User(Base):
 
 
 class DailyCheckin(Base):
-    """The daily "What's on today?" question and its answer. One per user and day."""
+    """The daily "What's on today?" question and its answer. One per user and day.
+
+    ``date`` is the local date in the profile's time zone. ``choice`` mirrors the type of
+    the first training session of the day; the sessions hold what was actually done.
+    """
 
     __tablename__ = "daily_checkins"
     __table_args__ = (UniqueConstraint("user_id", "date"),)
@@ -112,11 +118,14 @@ class DailyCheckin(Base):
     chat_id: Mapped[int | None] = mapped_column(BigInteger)
     sent_at: Mapped[dt.datetime | None] = mapped_column(UTCDateTime)
     answered_at: Mapped[dt.datetime | None] = mapped_column(UTCDateTime)
+    reminder_sent_at: Mapped[dt.datetime | None] = mapped_column(UTCDateTime)
     choice: Mapped[DayType | None] = mapped_column(_day_type())
     note: Mapped[str | None] = mapped_column(Text)
 
     user: Mapped[User] = relationship(back_populates="checkins")
-    sessions: Mapped[list[TrainingSession]] = relationship(back_populates="checkin")
+    sessions: Mapped[list[TrainingSession]] = relationship(
+        back_populates="checkin", order_by="TrainingSession.id"
+    )
 
 
 class TrainingSession(Base):
@@ -142,6 +151,35 @@ class TrainingSession(Base):
 
     user: Mapped[User] = relationship(back_populates="sessions")
     checkin: Mapped[DailyCheckin | None] = relationship(back_populates="sessions")
+    photos: Mapped[list[SessionPhoto]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="SessionPhoto.id",
+    )
+
+
+class SessionPhoto(Base):
+    """A photo sent for a session (e.g. the box whiteboard), stored under DATA_DIR.
+
+    ``path`` is relative to DATA_DIR (POSIX separators) so the data folder can be moved
+    or mounted elsewhere (D-010). ``file_unique_id`` is Telegram's stable id for the
+    file: it avoids storing the same photo twice if an update is delivered again.
+    """
+
+    __tablename__ = "session_photos"
+    __table_args__ = (UniqueConstraint("session_id", "file_unique_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("training_sessions.id", ondelete="CASCADE"), index=True
+    )
+    path: Mapped[str] = mapped_column(String(500))
+    file_unique_id: Mapped[str] = mapped_column(String(100))
+    media_group_id: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[dt.datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    session: Mapped[TrainingSession] = relationship(back_populates="photos")
 
 
 class LlmCall(Base):

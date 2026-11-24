@@ -21,7 +21,7 @@ from kide.storage import (
 )
 from kide.storage.db import downgrade_database
 
-TABLES = {"users", "daily_checkins", "training_sessions", "llm_calls"}
+TABLES = {"users", "daily_checkins", "training_sessions", "llm_calls", "session_photos"}
 
 
 @pytest.fixture
@@ -66,6 +66,27 @@ def test_migrations_match_models(db_url):
         diff = compare_metadata(MigrationContext.configure(connection), Base.metadata)
     engine.dispose()
     assert diff == []
+
+
+def test_upgrade_from_0001_keeps_data(tmp_path):
+    """A database created in phase 1 upgrades to the current schema without losing rows."""
+    from sqlalchemy import text
+
+    url = f"sqlite:///{(tmp_path / 'old.db').as_posix()}"
+    upgrade_database(url, "0001")
+    engine = make_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text("INSERT INTO users (id, name, created_at) VALUES (1, 'Alex', '2026-11-22')")
+        )
+    upgrade_database(url)
+    with make_session_factory(engine)() as db_session:
+        user = db_session.get(User, 1)
+        assert user is not None
+        assert user.name == "Alex"
+        assert user.language is None
+    engine.dispose()
+    assert table_names(url) == TABLES
 
 
 def test_downgrade_to_base_and_back(db_url):
