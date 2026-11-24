@@ -62,3 +62,35 @@ def should_send_checkin(
         return False
     due = checkin_due_at(local_date(now, tz), checkin_time, tz)
     return now >= due - EARLY_TOLERANCE
+
+
+# --- Optional reminder (schedule.checkin_reminder) ------------------------------------
+
+
+def reminder_due_at(sent_at: dt.datetime, after_hours: float) -> dt.datetime:
+    return sent_at + dt.timedelta(hours=after_hours)
+
+
+def should_send_reminder(
+    now: dt.datetime,
+    tz: ZoneInfo,
+    *,
+    enabled: bool,
+    after_hours: float,
+    sent_at: dt.datetime | None,
+    reminded: bool,
+    answered: bool,
+) -> bool:
+    """One reminder, only if the question was sent, is unanswered and it is still that day.
+
+    A reminder that would fall on the next local day is never sent (a 22:00 check-in
+    with a 3-hour reminder): by then the question belongs to a day that is over.
+    """
+    if not enabled or sent_at is None or reminded or answered:
+        return False
+    due = reminder_due_at(sent_at, after_hours)
+    if local_date(due, tz) != local_date(sent_at, tz) or local_date(now, tz) != local_date(
+        sent_at, tz
+    ):
+        return False
+    return now >= due - EARLY_TOLERANCE

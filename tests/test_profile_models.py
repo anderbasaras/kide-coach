@@ -300,3 +300,29 @@ def test_volume_targets(profile_data):
     assert str(targets["chest"]) == "10-16"
     profile_data["volume_targets"] = {"chest": "10-80"}
     assert "weekly sets must be between 0 and 60" in error_text(profile_data)
+
+
+# --- Check-in reminder ------------------------------------------------------------
+
+
+def test_reminder_is_off_by_default(profile_data):
+    reminder = validate(profile_data).schedule.checkin_reminder
+    assert reminder.enabled is False
+    assert reminder.after_hours == 3
+
+
+def test_reminder_can_be_enabled(profile_data):
+    profile_data["schedule"] = {"checkin_reminder": {"enabled": True, "after_hours": 1.5}}
+    reminder = validate(profile_data).schedule.checkin_reminder
+    assert (reminder.enabled, reminder.after_hours) == (True, 1.5)
+
+
+@pytest.mark.parametrize("hours", [0, 0.25, 12.5])
+def test_reminder_hours_are_bounded(profile_data, hours):
+    profile_data["schedule"] = {"checkin_reminder": {"enabled": True, "after_hours": hours}}
+    assert "after_hours" in error_text(profile_data)
+
+
+def test_reminder_rejects_unknown_keys(profile_data):
+    profile_data["schedule"] = {"checkin_reminder": {"enabled": True, "hours": 2}}
+    assert "hours" in error_text(profile_data)

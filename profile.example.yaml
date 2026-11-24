@@ -60,6 +60,9 @@ lifestyle:
 
 schedule:
   checkin_time: "09:00"     # daily "What's on today?" message, in identity.timezone
+  checkin_reminder:         # optional nudge if the check-in gets no answer
+    enabled: false
+    after_hours: 3          # 0.5-12; only on the same day, sent once
   weekly_summary:
     day: monday
     time: "09:00"

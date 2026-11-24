@@ -3,7 +3,14 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from kide.bot.timing import checkin_due_at, local_to_utc, next_checkin_at, should_send_checkin
+from kide.bot.timing import (
+    checkin_due_at,
+    local_to_utc,
+    next_checkin_at,
+    reminder_due_at,
+    should_send_checkin,
+    should_send_reminder,
+)
 
 MADRID = ZoneInfo("Europe/Madrid")
 NEW_YORK = ZoneInfo("America/New_York")
@@ -103,3 +110,47 @@ def test_never_twice(sent, answered):
 def test_after_midnight_the_new_day_waits_for_its_own_time():
     # 00:30 in Madrid on the 25th: yesterday is over, today's time has not come yet.
     assert not send(utc(2026, 11, 24, 23, 30))
+
+
+# --- Reminder ---------------------------------------------------------------------------
+
+SENT = DUE  # 09:00 in Madrid
+
+
+def remind(now, *, enabled=True, hours=3, sent_at=SENT, reminded=False, answered=False):
+    return should_send_reminder(
+        now,
+        MADRID,
+        enabled=enabled,
+        after_hours=hours,
+        sent_at=sent_at,
+        reminded=reminded,
+        answered=answered,
+    )
+
+
+def test_reminder_due_time():
+    assert reminder_due_at(SENT, 1.5) == SENT + dt.timedelta(minutes=90)
+
+
+def test_reminder_after_the_hours_without_answer():
+    assert not remind(SENT + dt.timedelta(hours=2, minutes=58))  # outside the 60 s margin
+    assert remind(SENT + dt.timedelta(hours=3))
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [{"enabled": False}, {"sent_at": None}, {"reminded": True}, {"answered": True}],
+)
+def test_no_reminder(overrides):
+    assert not remind(SENT + dt.timedelta(hours=4), **overrides)
+
+
+def test_no_reminder_for_a_day_that_is_over():
+    # Asked at 09:00, the bot was off all day and comes back after midnight.
+    assert not remind(utc(2026, 11, 24, 23, 30))
+
+
+def test_no_reminder_that_would_cross_midnight():
+    late_question = utc(2026, 11, 24, 21, 0)  # 22:00 in Madrid, +3 h = 01:00
+    assert not remind(late_question + dt.timedelta(hours=3), sent_at=late_question)

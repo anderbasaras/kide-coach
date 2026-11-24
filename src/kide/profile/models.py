@@ -318,8 +318,18 @@ class BoxSchedule(KideModel):
         return self
 
 
+class CheckinReminder(KideModel):
+    """Optional nudge when the daily check-in gets no answer. Off by default."""
+
+    enabled: bool = False
+    after_hours: float = Field(
+        3, ge=0.5, le=12, description="Hours after the question, on the same local day."
+    )
+
+
 class Schedule(KideModel):
     checkin_time: ClockTime = dt.time(9, 0)
+    checkin_reminder: CheckinReminder = Field(default_factory=CheckinReminder)
     weekly_summary: WeeklySummary = Field(default_factory=WeeklySummary)
     gym_session_minutes: int = Field(75, ge=15, le=300)
     gym_sessions_per_week: int | None = Field(None, ge=1, le=7)

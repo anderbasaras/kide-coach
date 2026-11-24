@@ -196,3 +196,85 @@ async def test_backup_recreates_a_missing_daily_job(services, bot):
     queue = FakeJobQueue()
     await scheduler._backup_job(make_context(services, bot, job_queue=queue))
     assert len(queue.active(scheduler.DAILY_JOB)) == 1
+
+
+# --- Optional reminder ----------------------------------------------------------------
+
+
+@pytest.fixture
+def reminding(tmp_path, profile_data, clock):
+    profile_data["identity"]["language"] = "es"
+    profile_data["schedule"] = {"checkin_reminder": {"enabled": True, "after_hours": 3}}
+    return make_services(tmp_path, profile_data, clock=lambda: clock.now)
+
+
+async def ask_at_nine(services, bot, clock, queue):
+    clock.now = DUE
+    assert await scheduler.ensure_today_checkin(bot, services, queue)
+
+
+@pytest.mark.anyio
+async def test_reminder_is_scheduled_when_the_question_is_sent(reminding, bot, clock):
+    queue = FakeJobQueue()
+    await ask_at_nine(reminding, bot, clock, queue)
+    (job,) = queue.active(scheduler.REMINDER_JOB)
+    assert job["when"] == DUE + dt.timedelta(hours=3)
+    assert job["job_kwargs"]["misfire_grace_time"] is None
+
+
+@pytest.mark.anyio
+async def test_reminder_is_sent_once_with_the_buttons(reminding, bot, clock):
+    await ask_at_nine(reminding, bot, clock, FakeJobQueue())
+    clock.now = DUE + dt.timedelta(hours=1)
+    assert not await scheduler.ensure_reminder(bot, reminding)
+
+    clock.now = DUE + dt.timedelta(hours=3)
+    assert await scheduler.ensure_reminder(bot, reminding)
+    call = bot.send_message.await_args
+    assert call.kwargs["text"] == "Recordatorio: todavía no me has dicho qué toca hoy."
+    buttons = [b.callback_data for row in call.kwargs["reply_markup"].inline_keyboard for b in row]
+    assert f"ci:{TODAY}:box" in buttons
+    assert checkin_row(reminding).reminder_sent_at == clock.now
+
+    clock.now = DUE + dt.timedelta(hours=4)
+    assert not await scheduler.ensure_reminder(bot, reminding)  # only one
+
+
+@pytest.mark.anyio
+async def test_no_reminder_once_answered(reminding, bot, clock):
+    await ask_at_nine(reminding, bot, clock, FakeJobQueue())
+    with unit_of_work(reminding.session_factory) as repos:
+        checkin = repos.checkins.get(reminding.user_id, TODAY)
+        repos.sessions.create(checkin, DayType.GYM)
+    clock.now = DUE + dt.timedelta(hours=3)
+    assert not await scheduler.ensure_reminder(bot, reminding)
+    assert scheduler.schedule_reminder(FakeJobQueue(), reminding) is None
+
+
+@pytest.mark.anyio
+async def test_reminder_survives_a_restart(reminding, bot, clock):
+    await ask_at_nine(reminding, bot, clock, FakeJobQueue())
+    clock.now = DUE + dt.timedelta(hours=1)  # restart: nothing to ask, reminder pending
+    queue = FakeJobQueue()
+    await scheduler.start_checkin_jobs(bot, queue, reminding)
+    assert bot.send_message.await_count == 1  # no second question
+    (job,) = queue.active(scheduler.REMINDER_JOB)
+    assert job["when"] == DUE + dt.timedelta(hours=3)
+
+
+@pytest.mark.anyio
+async def test_backup_check_sends_a_missed_reminder(reminding, bot, clock):
+    await ask_at_nine(reminding, bot, clock, FakeJobQueue())
+    clock.now = DUE + dt.timedelta(hours=3, minutes=10)
+    queue = FakeJobQueue()
+    await scheduler._backup_job(make_context(reminding, bot, job_queue=queue))
+    assert bot.send_message.await_args.kwargs["text"].startswith("Recordatorio")
+
+
+@pytest.mark.anyio
+async def test_no_reminder_when_disabled(services, bot, clock):
+    queue = FakeJobQueue()
+    await ask_at_nine(services, bot, clock, queue)
+    assert queue.active(scheduler.REMINDER_JOB) == []
+    clock.now = DUE + dt.timedelta(hours=5)
+    assert not await scheduler.ensure_reminder(bot, services)
