@@ -17,6 +17,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -167,6 +168,11 @@ class SessionRepository:
 
     def has_photo(self, training: TrainingSession, file_unique_id: str) -> bool:
         return any(photo.file_unique_id == file_unique_id for photo in training.photos)
+
+    def set_parsed(self, training: TrainingSession, record: dict[str, Any] | None) -> None:
+        """Store Claude's reading (a ``ParsedRecord`` as JSON), or clear it with ``None``."""
+        training.parsed_json = record
+        self._session.flush()
 
     def reset(self, training: TrainingSession, day_type: DayType) -> list[str]:
         """Start the session over with a new type (correction).

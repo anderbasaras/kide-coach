@@ -62,6 +62,7 @@ def make_bot() -> MagicMock:
         "answer_callback_query",
         "set_my_commands",
         "get_file",
+        "send_chat_action",
     ):
         # Unnamed so the calls are also recorded, in order, in bot.mock_calls.
         setattr(bot, method, AsyncMock())

@@ -21,9 +21,12 @@ from kide.bot.handlers import checkin, commands, fallback
 from kide.bot.menu import sync_menus
 from kide.bot.scheduler import start_checkin_jobs
 from kide.bot.services import SERVICES_KEY, Services
+from kide.catalog import CatalogError
+from kide.catalog.movements import default_movements
 from kide.config import ConfigError, Settings, get_settings
 from kide.i18n import Translator
 from kide.llm.client import LlmClient
+from kide.llm.parsing import Parser
 from kide.logging_config import configure_logging
 from kide.profile import ProfileError, load_profile
 from kide.storage import make_engine, make_session_factory, upgrade_database
@@ -78,7 +81,12 @@ def prepare_services(settings: Settings) -> Services:
     with unit_of_work(session_factory) as repos:
         user = repos.users.get_or_create(profile.identity.name)
         user_id, chosen_language = user.id, user.language
+    try:
+        catalog = default_movements()
+    except CatalogError as exc:
+        raise StartupError(f"Movement catalog: {exc}") from None
     llm = LlmClient.from_settings(settings, session_factory, user_id)
+    parser = Parser(llm, catalog, settings.data_dir) if llm is not None else None
     if llm is None:
         logger.warning(
             "ANTHROPIC_API_KEY or ANTHROPIC_MODEL is not set: WODs and activities are saved "
@@ -94,6 +102,7 @@ def prepare_services(settings: Settings) -> Services:
         user_id=user_id,
         chosen_language=chosen_language,
         llm=llm,
+        parser=parser,
     )
 
 

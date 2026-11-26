@@ -18,6 +18,7 @@ from telegram.ext import ContextTypes
 from kide.config import Settings
 from kide.i18n import Translator
 from kide.llm.client import LlmClient
+from kide.llm.parsing import Parser
 from kide.profile import Profile
 
 SERVICES_KEY = "services"
@@ -40,6 +41,7 @@ class Services:
     # None when ANTHROPIC_API_KEY or ANTHROPIC_MODEL is missing: the bot keeps working
     # as in phase 2 (inputs saved, not interpreted; no coach chat).
     llm: LlmClient | None = None
+    parser: Parser | None = None  # reads WODs and activities; None without llm
 
     @property
     def tz(self) -> ZoneInfo:

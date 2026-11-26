@@ -19,6 +19,8 @@ class Flow(enum.IntEnum):
 
     WOD = 1  # box: waiting for the WOD (texts and/or photos) until "Done"
     NOTE = 2  # gym / rest / other: waiting for an optional note
+    REVIEW = 3  # Claude's reading is shown: Confirm / Adjust (or the effort 1-10)
+    ADJUST = 4  # waiting for the user's correction (or clarification) in their own words
 
 
 def flow_after_choice(choice: DayType) -> Flow:

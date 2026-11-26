@@ -176,3 +176,34 @@ parsed:
   elevation: "+{value} m"
   heart_rate: "FC {value} ppm"
   rpe: "RPE {value}/10"
+
+review:
+  # Lo que ha leído Claude de un WOD o una actividad, antes de guardarlo.
+  reading_wod: Leyendo el WOD…
+  reading_activity: Leyendo la actividad…
+  ask: "¿Lo guardo así? Si algo no cuadra, pulsa «Ajustar» y dímelo con tus palabras."
+  confirm_button: ✅ Confirmar
+  adjust_button: ✏️ Ajustar
+  raw_button: Guardar sin leer
+  retry_button: Reintentar
+  confirmed_wod: WOD guardado.
+  confirmed_activity: Actividad guardada.
+  saved_raw: "Guardado tal como lo mandaste, sin leerlo."
+  adjust_prompt: >-
+    Dime qué hay que cambiar, por ejemplo: «eran 15 minutos» o «los wall balls eran de 6 kg».
+  adjusting: Ajustando…
+  adjust_failed: "No he podido aplicar ese cambio. Prueba a decirlo de otra forma."
+  invalid: >-
+    No he conseguido leerlo bien. Escríbemelo en texto (o solo lo que falte) y lo
+    vuelvo a intentar, o guárdalo sin leer.
+  llm_error: "Ahora mismo no puedo hablar con Claude. Lo que mandaste está guardado: pulsa «Reintentar» dentro de un rato."
+  llm_error_config: >-
+    Claude ha rechazado la petición (clave de la API, crédito o modelo). Lo que mandaste
+    está guardado; quien gestiona Kide debe revisar `kide llm check`.
+  skipped_images: "No he podido abrir {count} de las imágenes."
+  rpe_ask: >-
+    ¿Qué esfuerzo te ha supuesto, del 1 al 10? (1 muy suave · 3 moderado · 5 duro ·
+    7 muy duro · 10 máximo)
+  gone: Esa lectura ya no existe. Escribe /{today} para ver tu día.
+  already_confirmed: "Ya estaba guardado:"
+  unsupported: "Escribe el cambio como texto, o pulsa «Guardar sin leer»."

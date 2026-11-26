@@ -32,6 +32,7 @@ def api(monkeypatch):
         "edit_message_reply_markup",
         "answer_callback_query",
         "set_my_commands",
+        "send_chat_action",
     ):
         mock = AsyncMock()
         calls.attach_mock(mock, method)
@@ -117,6 +118,80 @@ async def test_full_box_day_through_the_application(app, api):
         assert training.type is DayType.BOX
         assert training.raw_input == "EMOM 10: 5 thrusters"
         assert len(training.photos) == 1
+
+
+@pytest.mark.anyio
+async def test_box_read_adjusted_and_confirmed_through_the_application(app, api):
+    """Claude's reading, Adjust (a message in the open conversation) and Confirm."""
+    from kide.catalog.movements import default_movements
+    from kide.llm.client import LlmClient
+    from kide.llm.parsing import Parser
+    from tests.llm_fakes import FakeSdk, tool_message
+
+    application, services = app
+    wod = {
+        "format": "emom",
+        "confidence": "high",
+        "blocks": [
+            {"format": "emom", "duration_min": 10, "movements": [{"name": "TH", "reps": 5}]}
+        ],
+    }
+    sdk = FakeSdk(
+        tool_message("record_wod", wod),
+        tool_message("record_wod", {**wod, "blocks": [{**wod["blocks"][0], "duration_min": 12}]}),
+    )
+    services.llm = LlmClient(
+        sdk,
+        chat_model="claude-opus-5-5",
+        parse_model="claude-haiku-5-5",
+        session_factory=services.session_factory,
+        user_id=services.user_id,
+    )
+    services.parser = Parser(services.llm, default_movements(), services.data_dir)
+    day = services.clock().date()
+
+    await feed(application, callback_update(data=f"ci:{day}:box"))
+    await feed(application, message_update(text="EMOM 10: 5 thrusters"))
+    with unit_of_work(services.session_factory) as repos:
+        session_id = repos.sessions.for_day(services.user_id, day)[0].id
+    await feed(application, callback_update(data=f"wod:{session_id}"))
+    assert texts(api)[-1].startswith("WOD · EMOM\nEMOM · 10 min")
+
+    await feed(application, callback_update(data=f"radj:{session_id}"))
+    await feed(application, message_update(text="eran 12 minutos"))
+    assert texts(api)[-1].startswith("WOD · EMOM\nEMOM · 12 min")
+
+    await feed(application, callback_update(data=f"rok:{session_id}"))
+    assert texts(api)[-1] == "WOD guardado."
+    with unit_of_work(services.session_factory) as repos:
+        record = repos.sessions.get(session_id).parsed_json
+    assert record["status"] == "confirmed"
+    assert record["data"]["blocks"][0]["movements"][0]["movement_id"] == "thruster"
+
+
+@pytest.mark.anyio
+async def test_review_buttons_work_after_a_restart(app, api):
+    """No open conversation (e.g. the bot restarted): Confirm still confirms the draft."""
+    from kide.llm.schemas import ParsedRecord, Wod
+
+    application, services = app
+    day = services.clock().date()
+    wod = Wod.model_validate(
+        {
+            "format": "amrap",
+            "confidence": "high",
+            "blocks": [{"format": "amrap", "movements": [{"name": "Burpees", "reps": 5}]}],
+        }
+    )
+    # A box session with a draft, created without any conversation (as after a restart).
+    with unit_of_work(services.session_factory) as repos:
+        checkin = repos.checkins.get_or_create(services.user_id, day)
+        training = repos.sessions.create(checkin, DayType.BOX, raw_input="5 burpees")
+        repos.sessions.set_parsed(training, ParsedRecord.draft(wod).to_json())
+        session_id = training.id
+
+    await feed(application, callback_update(data=f"rok:{session_id}"))
+    assert texts(api)[-1] == "WOD guardado."
 
 
 @pytest.mark.anyio

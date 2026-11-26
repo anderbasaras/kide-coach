@@ -9,6 +9,9 @@ Flow (ConversationHandler, one per chat and user):
   until "Done".
 - Gym / Rest / Other -> ``Flow.NOTE``: optional screenshots (Strava, the watch...) and
   one optional note, or "No note".
+- Box and Other are then read by Claude (see ``review``) -> ``Flow.REVIEW`` (Confirm /
+  Adjust) and ``Flow.ADJUST`` (the correction in the user's words). Gym and rest
+  screenshots are not read in phase 3.
 
 Everything is saved step by step, so nothing is lost if the bot restarts in the middle;
 the conversation state itself is not persisted (D-029). "Done" and "No note" also work
@@ -34,7 +37,7 @@ from telegram.ext import (
 )
 from telegram.warnings import PTBUserWarning
 
-from kide.bot.handlers import day_edit
+from kide.bot.handlers import day_edit, review
 from kide.bot.handlers.common import (
     IMAGE,
     SESSION_KEY,
@@ -54,6 +57,11 @@ from kide.bot.keyboards import (
     CHECKIN_PREFIX,
     FIX_SET_PREFIX,
     NOTE_SKIP_PREFIX,
+    REVIEW_ADJUST_PREFIX,
+    REVIEW_OK_PREFIX,
+    REVIEW_RAW_PREFIX,
+    REVIEW_RETRY_PREFIX,
+    RPE_PREFIX,
     WOD_DONE_PREFIX,
     checkin_keyboard,
     parse_checkin,
@@ -325,6 +333,10 @@ async def wod_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if status is None:
         return ConversationHandler.END
     photos, has_text = status
+    if session_id is not None and (photos or has_text):
+        state = await review.interpret(context, services, chat.id, session_id)
+        if state is not None:
+            return state
     text = (
         services.t("wod.saved", photos=photos, text=yes_no(services, has_text))
         if photos or has_text
@@ -364,6 +376,9 @@ async def note_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         repos.sessions.set_note(training, message.text)
         summary = describe_session(services, training)
     context.user_data.pop(SESSION_KEY, None)
+    state = await review.interpret(context, services, message.chat_id, session_id)
+    if state is not None:
+        return state
     await message.reply_text(services.t("note.saved", summary=summary))
     return ConversationHandler.END
 
@@ -379,7 +394,12 @@ async def note_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await remove_buttons(query.message)
     if context.user_data is not None:
         context.user_data.pop(SESSION_KEY, None)
-    summary = _session_summary(services, parse_session_id(query.data, NOTE_SKIP_PREFIX))
+    session_id = parse_session_id(query.data, NOTE_SKIP_PREFIX)
+    if session_id is not None:
+        state = await review.interpret(context, services, chat.id, session_id)
+        if state is not None:
+            return state
+    summary = _session_summary(services, session_id)
     if summary:
         await context.bot.send_message(
             chat_id=chat.id, text=services.t("note.saved", summary=summary)
@@ -396,6 +416,16 @@ async def note_unsupported(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 # --- Wiring ----------------------------------------------------------------------------
 
 
+def _review_buttons() -> list[CallbackQueryHandler]:
+    return [
+        CallbackQueryHandler(review.confirm, pattern=f"^{REVIEW_OK_PREFIX}:"),
+        CallbackQueryHandler(review.adjust_start, pattern=f"^{REVIEW_ADJUST_PREFIX}:"),
+        CallbackQueryHandler(review.save_raw, pattern=f"^{REVIEW_RAW_PREFIX}:"),
+        CallbackQueryHandler(review.retry, pattern=f"^{REVIEW_RETRY_PREFIX}:"),
+        CallbackQueryHandler(review.set_rpe, pattern=f"^{RPE_PREFIX}:"),
+    ]
+
+
 def build_conversation() -> ConversationHandler:
     with warnings.catch_warnings():
         # per_message=False is intended: the flow mixes buttons and messages, per chat/user.
@@ -406,6 +436,8 @@ def build_conversation() -> ConversationHandler:
                 # Correcting a session or adding one also opens its flow.
                 CallbackQueryHandler(day_edit.fix_set, pattern=f"^{FIX_SET_PREFIX}:"),
                 CallbackQueryHandler(day_edit.add_set, pattern=f"^{ADD_SET_PREFIX}:"),
+                # "Adjust" waits for a message, so it (re)opens the conversation.
+                CallbackQueryHandler(review.adjust_start, pattern=f"^{REVIEW_ADJUST_PREFIX}:"),
             ],
             states={
                 Flow.WOD: [
@@ -419,6 +451,13 @@ def build_conversation() -> ConversationHandler:
                     MessageHandler(NEW_MESSAGE & IMAGE, note_photo),
                     CallbackQueryHandler(note_skip, pattern=f"^{NOTE_SKIP_PREFIX}:"),
                     MessageHandler(NEW_MESSAGE, note_unsupported),
+                ],
+                # Free text in REVIEW is not caught: it falls through to the coach chat.
+                Flow.REVIEW: _review_buttons(),
+                Flow.ADJUST: [
+                    MessageHandler(NEW_MESSAGE & filters.TEXT, review.adjust_text),
+                    *_review_buttons(),
+                    MessageHandler(NEW_MESSAGE, review.adjust_unsupported),
                 ],
             },
             fallbacks=[],
@@ -434,4 +473,8 @@ def register(application: Application, services: Services) -> None:
     # Buttons tapped after a restart, when the conversation is no longer open.
     application.add_handler(CallbackQueryHandler(wod_done, pattern=f"^{WOD_DONE_PREFIX}:"))
     application.add_handler(CallbackQueryHandler(note_skip, pattern=f"^{NOTE_SKIP_PREFIX}:"))
+    # Review buttons outside the conversation (after a restart or a timeout): the draft
+    # is in the database, so they keep working.
+    for handler in _review_buttons():
+        application.add_handler(handler)
     day_edit.register(application)

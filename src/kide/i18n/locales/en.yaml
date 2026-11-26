@@ -177,3 +177,34 @@ parsed:
   elevation: "+{value} m"
   heart_rate: "HR {value} bpm"
   rpe: "RPE {value}/10"
+
+review:
+  # Claude's reading of a WOD or an activity, before it is saved.
+  reading_wod: Reading the WOD…
+  reading_activity: Reading the activity…
+  ask: "Shall I save it like this? If something is off, tap «Adjust» and tell me in your own words."
+  confirm_button: ✅ Confirm
+  adjust_button: ✏️ Adjust
+  raw_button: Save without reading
+  retry_button: Try again
+  confirmed_wod: WOD saved.
+  confirmed_activity: Activity saved.
+  saved_raw: "Saved as you sent it, without reading it."
+  adjust_prompt: >-
+    Tell me what to change, e.g. «it was 15 minutes» or «the wall balls were 6 kg».
+  adjusting: Adjusting…
+  adjust_failed: "I couldn't apply that change. Try saying it another way."
+  invalid: >-
+    I couldn't read it well. Write it to me as text (or just the part that's missing)
+    and I'll try again, or save it without reading.
+  llm_error: "I couldn't reach Claude right now. What you sent is saved: tap «Try again» in a while."
+  llm_error_config: >-
+    Claude rejected the request (API key, credit or model). What you sent is saved;
+    the person running Kide should check `kide llm check`.
+  skipped_images: "I couldn't open {count} of the images."
+  rpe_ask: >-
+    How hard was it, from 1 to 10? (1 very easy · 3 moderate · 5 hard · 7 very hard ·
+    10 maximal)
+  gone: That reading no longer exists. Use /{today} to see your day.
+  already_confirmed: "Already saved:"
+  unsupported: "Write the change as text, or tap «Save without reading»."

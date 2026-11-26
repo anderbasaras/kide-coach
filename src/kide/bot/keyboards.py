@@ -24,6 +24,11 @@ FIX_PICK_PREFIX = "fpick"  # fpick:<session id>    which session to correct
 FIX_SET_PREFIX = "fset"  # fset:<session id>:<type> the corrected type
 FIX_DELETE_PREFIX = "fdel"  # fdel:<session id>    delete that session
 ADD_SET_PREFIX = "aset"  # aset:<YYYY-MM-DD>:<type> the added session
+REVIEW_OK_PREFIX = "rok"  # rok:<session id>       confirm Claude's reading
+REVIEW_ADJUST_PREFIX = "radj"  # radj:<session id> correct it in your own words
+REVIEW_RAW_PREFIX = "rraw"  # rraw:<session id>    keep the input, no interpretation
+REVIEW_RETRY_PREFIX = "rtry"  # rtry:<session id>  try reading again after an API error
+RPE_PREFIX = "rpe"  # rpe:<session id>:<1-10>      perceived effort of an activity
 
 Translate = Callable[[str], str]
 MAX_CALLBACK_BYTES = 64
@@ -110,6 +115,62 @@ def parse_session_choice(data: str | None, prefix: str) -> tuple[int, DayType] |
 def single_button(text: str, prefix: str, session_id: int) -> InlineKeyboardMarkup:
     button = InlineKeyboardButton(text, callback_data=callback_data(prefix, str(session_id)))
     return InlineKeyboardMarkup([[button]])
+
+
+def review_keyboard(t: Translate, session_id: int) -> InlineKeyboardMarkup:
+    """Confirm / Adjust under Claude's reading."""
+    sid = str(session_id)
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    t("review.confirm_button"), callback_data=callback_data(REVIEW_OK_PREFIX, sid)
+                ),
+                InlineKeyboardButton(
+                    t("review.adjust_button"),
+                    callback_data=callback_data(REVIEW_ADJUST_PREFIX, sid),
+                ),
+            ]
+        ]
+    )
+
+
+def raw_keyboard(t: Translate, session_id: int, retry: bool = False) -> InlineKeyboardMarkup:
+    """ "Save without interpretation", and "Try again" after an API error."""
+    sid = str(session_id)
+    row = [
+        InlineKeyboardButton(
+            t("review.raw_button"), callback_data=callback_data(REVIEW_RAW_PREFIX, sid)
+        )
+    ]
+    if retry:
+        row.insert(
+            0,
+            InlineKeyboardButton(
+                t("review.retry_button"), callback_data=callback_data(REVIEW_RETRY_PREFIX, sid)
+            ),
+        )
+    return InlineKeyboardMarkup([row])
+
+
+def rpe_keyboard(session_id: int) -> InlineKeyboardMarkup:
+    """1-10 in two rows of five."""
+    buttons = [
+        InlineKeyboardButton(
+            str(value), callback_data=callback_data(RPE_PREFIX, str(session_id), str(value))
+        )
+        for value in range(1, 11)
+    ]
+    return InlineKeyboardMarkup([buttons[:5], buttons[5:]])
+
+
+def parse_rpe(data: str | None) -> tuple[int, int] | None:
+    """``(session id, rpe)`` from ``rpe:<id>:<1-10>``."""
+    parts = parse_callback(data, RPE_PREFIX)
+    if not parts or len(parts) != 2 or not all(part.isdigit() for part in parts):
+        return None
+    session_id, value = int(parts[0]), int(parts[1])
+    return (session_id, value) if 1 <= value <= 10 else None
 
 
 def parse_session_id(data: str | None, prefix: str) -> int | None:
