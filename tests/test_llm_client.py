@@ -71,6 +71,7 @@ async def test_call_sends_the_request_and_records_tokens_and_cost(factory):
     assert request["model"] == "claude-opus-5-5"
     assert request["max_tokens"] == 500
     assert "tools" not in request
+    assert "output_config" not in request
     assert request["system"][0]["cache_control"] == {"type": "ephemeral"}
     assert "cache_control" not in request["system"][1]
 
@@ -97,8 +98,10 @@ async def test_tools_and_tool_choice_are_passed_and_tool_uses_read(factory, tmp_
         tools=tools,
         tool_choice={"type": "tool", "name": "record_wod"},
         timeout_s=5,
+        effort="low",
     )
     assert sdk.requests[0]["tools"] == tools
+    assert sdk.requests[0]["output_config"] == {"effort": "low"}
     assert sdk.requests[0]["tool_choice"] == {"type": "tool", "name": "record_wod"}
     assert sdk.requests[0]["timeout"] == 5
     assert [use.input for use in result.tool_uses("record_wod")] == [{"format": "amrap"}]

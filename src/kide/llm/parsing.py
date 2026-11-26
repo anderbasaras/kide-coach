@@ -1,10 +1,18 @@
 """Turn a WOD or an activity (text and photos) into validated structured data.
 
-``Parser`` makes one tool-use call (forced to the right tool) and validates the tool
-input with Pydantic. If it does not validate, Claude gets the validation errors back as
-an error ``tool_result`` and one more try; if it still fails, the outcome is ``invalid``
-and the bot asks the user to clarify (D-005: Claude only structures; nothing is decided
-here).
+``Parser`` offers Claude one tool (record_wod or record_activity) with ``tool_choice:
+auto`` and validates the tool input with Pydantic. Forced tool use is not used: Claude
+Opus 5.5 and Sonnet 5.5 reject it, and strict tools or JSON outputs cannot express our
+schemas within their complexity limits. So:
+
+- no tool call (Claude answered in text): one more try, asking it to call the tool;
+- invalid input: Claude gets the validation errors back as an error ``tool_result``
+  and one more try;
+- a refusal, or a second failure: the outcome is ``invalid`` and the bot asks the user
+  to clarify (D-005: Claude only structures; nothing is decided here).
+
+Parsing runs at low effort: extraction needs little reasoning, and thinking tokens are
+billed as output. Thinking blocks are passed back unmodified on the retry.
 
 Photos are read from DATA_DIR, rotated by their EXIF orientation, shrunk so their long
 edge is at most ``max_image_edge`` px and re-encoded as JPEG. That keeps every image well
@@ -34,6 +42,7 @@ from kide.llm.prompts.parsing import (
     ACTIVITY_TOOL,
     WOD_TOOL,
     athlete_context,
+    language_name,
     parse_system_prompt,
     parse_tools,
 )
@@ -46,8 +55,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAX_IMAGE_EDGE = 2000
 JPEG_QUALITY = 85
 MAX_IMAGES = 6
-WOD_MAX_TOKENS = 4096
-ACTIVITY_MAX_TOKENS = 1024
+WOD_MAX_TOKENS = 8192  # thinking + the tool call; a full board is ~1-2k output tokens
+ACTIVITY_MAX_TOKENS = 4096
+PARSE_EFFORT = "low"
 MAX_ERRORS_SHOWN = 15
 
 
@@ -131,7 +141,7 @@ class Parser:
         self._data_dir = data_dir
         self._max_image_edge = max_image_edge
         self._system_prompt = parse_system_prompt(catalog)
-        self._tools = parse_tools()
+        self._tools = {tool["name"]: tool for tool in parse_tools()}
 
     async def parse(
         self,
@@ -158,6 +168,7 @@ class Parser:
             if kind is Kind.WOD
             else "Read this activity and call record_activity."
         )
+        request += f" Free-text fields in {language_name(athlete.language)}."
         content: list[dict[str, Any]] = [*images]
         body = f"{request}\n\nThe athlete wrote:\n{text}" if text else request
         content.append({"type": "text", "text": body})
@@ -209,29 +220,44 @@ class Parser:
         messages: list[dict[str, Any]] = [{"role": "user", "content": content}]
         outcome = ParseOutcome(ParseStatus.INVALID)
 
-        for _attempt in range(2):  # first try + one retry with the validation errors
+        for _attempt in range(2):  # first try + one retry
             result = await self._llm.call(
                 purpose=purpose,
                 model=self._llm.parse_model,
                 system=system,
                 messages=messages,
                 max_tokens=_MAX_TOKENS[kind],
-                tools=self._tools,
-                tool_choice={"type": "tool", "name": tool},
+                tools=[self._tools[tool]],
+                tool_choice={"type": "auto"},
                 session_id=session_id,
                 timeout_s=IMAGE_TIMEOUT_S if has_images else TEXT_TIMEOUT_S,
+                effort=PARSE_EFFORT,
             )
             outcome.call_ids.append(result.call_id)
             outcome.attempts += 1
+            # Passed back unmodified on a retry (thinking blocks included).
+            assistant_turn = {
+                "role": "assistant",
+                "content": [
+                    block.model_dump(exclude_none=True) for block in result.message.content
+                ],
+            }
             uses = result.tool_uses(tool)
             if not uses:
-                logger.warning(
+                logger.info(
                     "Parse call %s returned no %s call (stop=%s)",
                     result.call_id,
                     tool,
                     result.stop_reason,
                 )
-                return outcome
+                if result.stop_reason in ("refusal", "max_tokens"):
+                    return outcome
+                nudge = (
+                    f"Do not answer in text. Call {tool} now with what you can read; "
+                    "describe anything you cannot read in `unreadable`."
+                )
+                messages = [*messages, assistant_turn, {"role": "user", "content": nudge}]
+                continue
             use = uses[0]
             try:
                 item = model.model_validate(use.input)
@@ -244,10 +270,7 @@ class Parser:
                 )
                 messages = [
                     *messages,
-                    {
-                        "role": "assistant",
-                        "content": [block.model_dump() for block in result.message.content],
-                    },
+                    assistant_turn,
                     {
                         "role": "user",
                         "content": [

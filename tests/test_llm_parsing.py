@@ -81,11 +81,15 @@ async def test_text_wod_is_parsed_and_normalised(setup):
 
     request = sdk.requests[0]
     assert request["model"] == "claude-haiku-5-5"
-    assert [tool["name"] for tool in request["tools"]] == ["record_wod", "record_activity"]
-    assert request["tool_choice"] == {"type": "tool", "name": "record_wod"}
+    assert [tool["name"] for tool in request["tools"]] == ["record_wod"]
+    # Forced tool use is rejected by Opus/Sonnet 5.5: auto + validation instead.
+    assert request["tool_choice"] == {"type": "auto"}
+    assert request["output_config"] == {"effort": "low"}
     assert request["system"][0]["cache_control"] == {"type": "ephemeral"}
     assert "sex male" in request["system"][1]["text"]
-    assert "AMRAP 12: 10 T2B, 15 WB" in request["messages"][0]["content"][-1]["text"]
+    user_text = request["messages"][0]["content"][-1]["text"]
+    assert "AMRAP 12: 10 T2B, 15 WB" in user_text
+    assert "Free-text fields in Spanish" in user_text
     assert purposes(factory) == ["wod_parse_text"]
 
 
@@ -131,9 +135,31 @@ async def test_still_invalid_after_the_retry(setup):
     assert outcome.attempts == 2
 
 
-async def test_no_tool_call_is_invalid(setup):
+async def test_a_text_answer_gets_one_nudge_to_call_the_tool(setup):
     parser, sdk, _, _ = setup
-    sdk.queue(make_message("I can't read this.", stop_reason="refusal"))
+    thinking = {"type": "thinking", "thinking": "hmm", "signature": "sig"}
+    first = make_message([thinking, {"type": "text", "text": "Here is the WOD..."}])
+    sdk.queue(first, tool_message("record_wod", VALID_WOD))
+    outcome = await parser.parse(Kind.WOD, text="AMRAP", photo_paths=[], athlete=ATHLETE)
+    assert outcome.ok
+    assert outcome.attempts == 2
+    retry = sdk.requests[1]["messages"]
+    # thinking blocks are passed back unmodified
+    assert retry[1]["content"][0] == thinking
+    assert "Call record_wod now" in retry[2]["content"]
+
+
+async def test_text_twice_is_invalid(setup):
+    parser, sdk, _, _ = setup
+    sdk.queue(make_message("no"), make_message("still no"))
+    outcome = await parser.parse(Kind.WOD, text="?", photo_paths=[], athlete=ATHLETE)
+    assert outcome.status is ParseStatus.INVALID
+    assert outcome.attempts == 2
+
+
+async def test_a_refusal_is_not_retried(setup):
+    parser, sdk, _, _ = setup
+    sdk.queue(make_message("I can't help with that.", stop_reason="refusal"))
     outcome = await parser.parse(Kind.WOD, text="?", photo_paths=[], athlete=ATHLETE)
     assert outcome.status is ParseStatus.INVALID
     assert outcome.attempts == 1
@@ -161,7 +187,7 @@ async def test_activity_is_parsed(setup):
         Kind.ACTIVITY, text="Gorbea con barro", photo_paths=[path], athlete=ATHLETE
     )
     assert isinstance(outcome.item, Activity)
-    assert sdk.requests[0]["tool_choice"]["name"] == "record_activity"
+    assert [tool["name"] for tool in sdk.requests[0]["tools"]] == ["record_activity"]
     assert purposes(factory) == ["activity_parse"]
 
 
@@ -201,6 +227,9 @@ def test_prompt_contents():
     prompt = parse_system_prompt(default_movements())
     assert "toes_to_bar: Toes-to-bar; t2b" in prompt
     assert "never copy a person's name" in prompt
+    assert "Never explain your own choices in any field" in prompt
     assert "rpe" in prompt
     assert athlete_context(None, "en").startswith("Athlete: sex not stated")
-    assert athlete_context("female", "es").endswith("Spanish.")
+    context = athlete_context("female", "es")
+    assert "sex female" in context
+    assert "Write every `notes` and `unreadable` text in Spanish" in context

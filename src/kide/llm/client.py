@@ -229,8 +229,13 @@ class LlmClient:
         tool_choice: dict[str, Any] | None = None,
         session_id: int | None = None,
         timeout_s: float = TEXT_TIMEOUT_S,
+        effort: str | None = None,
     ) -> LlmResult:
-        """One Messages API call, recorded in ``llm_calls``. Raises :class:`LlmError`."""
+        """One Messages API call, recorded in ``llm_calls``. Raises :class:`LlmError`.
+
+        ``effort`` (``low`` ... ``max``) is soft guidance on how much the model thinks;
+        ``max_tokens`` caps thinking and answer together.
+        """
         kwargs: dict[str, Any] = {
             "model": model,
             "max_tokens": max_tokens,
@@ -242,6 +247,8 @@ class LlmClient:
             kwargs["tools"] = tools
         if tool_choice:
             kwargs["tool_choice"] = tool_choice
+        if effort:
+            kwargs["output_config"] = {"effort": effort}
 
         started = self._clock()
         try:

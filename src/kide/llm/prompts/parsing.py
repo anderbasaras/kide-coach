@@ -1,8 +1,9 @@
 """System prompt and tools for reading WODs and "Other" activities.
 
-The stable part (rules + movement catalog + tool definitions) is identical for every
-parsing call, WOD or activity, so it is cached once and read at 0.05-0.1x on later calls.
-Only the short athlete context changes, and it goes in a second, uncached system block.
+The stable part (the tool definition, rules and movement catalog) is identical for every
+call of the same kind (parse, retry, adjust), so it is cached once and read at 0.05-0.1x
+within the cache lifetime. Only the short athlete context changes, and it goes in a
+second, uncached system block.
 
 Principle 5: the athlete context carries only what reading a board needs (sex, to pick
 the right Rx load and calories; the language for free-text fields). Nothing else from the
@@ -24,7 +25,8 @@ LANGUAGE_NAMES = {"en": "English", "es": "Spanish"}
 PARSE_RULES = """\
 You read training logs for Kide, a hybrid training coach. Your only job is to turn what \
 the athlete sends (whiteboard photos, text, watch or app screenshots) into structured data \
-by calling exactly one tool. You never coach, plan or judge here.
+by calling the tool you are given, always, exactly once. Do not answer in text. You never \
+coach, plan or judge here.
 
 General rules
 - Record only what is written or clearly shown. Never invent movements, loads or numbers.
@@ -34,7 +36,15 @@ doubts; "low" = you had to guess something that matters.
 - Whiteboards often show other people's names, scores or a leaderboard, and screenshots \
 may show maps or addresses. Ignore them completely: never copy a person's name, a street \
 or coordinates into any field.
-- Write `notes`, `unreadable` and `name` in the athlete's language (given below).
+- `notes` are only for information that is in the input and has no field of its own \
+(e.g. "partner WOD", "every 3 min: 1 rope climb"). Leave them empty when there is \
+nothing to add. Never explain your own choices in any field: picking one value of a \
+male/female pair, converting units or matching a catalog id is expected and needs no \
+comment anywhere (`load_text` already keeps what was written).
+- Write `notes` and `unreadable` in the athlete's language (given at the end), even when \
+the board is in another language. `name` fields keep the original wording.
+- `unreadable` is for parts that are in the input but illegible or ambiguous, not for \
+details nobody wrote (a missing target height is not "unreadable").
 
 Reading a WOD (tool record_wod)
 - One block per part of the session (warm-up, strength, skill, metcon, accessory). Set \
@@ -91,15 +101,23 @@ def parse_system_prompt(catalog: MovementCatalog) -> str:
     return PARSE_RULES + catalog_listing(catalog)
 
 
+def language_name(language: str) -> str:
+    return LANGUAGE_NAMES.get(language, language)
+
+
 def athlete_context(sex: str | None, language: str) -> str:
     """The uncached part: the minimum about the athlete needed to read a board."""
     sex_text = sex if sex in ("male", "female") else "not stated (record both values in load_text)"
-    language_name = LANGUAGE_NAMES.get(language, language)
-    return f"Athlete: sex {sex_text}. Athlete's language: {language_name}."
+    name = language_name(language)
+    return (
+        f"Athlete: sex {sex_text}. Athlete's language: {name}.\n"
+        f"Write every `notes` and `unreadable` text in {name}. Leave `notes` null unless the "
+        "input itself says something that fits no other field."
+    )
 
 
 def parse_tools() -> list[dict[str, Any]]:
-    """Both tools, always in the same order, so WOD and activity calls share the cache."""
+    """The two parsing tools; each call offers only the one it needs."""
     return [
         {
             "name": WOD_TOOL,

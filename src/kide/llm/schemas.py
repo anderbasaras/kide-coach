@@ -98,7 +98,14 @@ class WodMovement(_Schema):
     height_cm: float | None = Field(
         None, ge=0, le=400, description="Box height or wall-ball target height."
     )
-    notes: str | None = Field(None, max_length=200)
+    notes: str | None = Field(
+        None,
+        max_length=200,
+        description=(
+            "Only extra text from the input that fits no other field (e.g. 'max cal', "
+            "'unbroken'). Usually null. Never explain your own choices here."
+        ),
+    )
 
     @model_validator(mode="after")
     def _ladder_and_reps(self) -> WodMovement:
@@ -129,7 +136,11 @@ class WodBlock(_Schema):
         None, gt=0, le=120, description="Strength intensity as % of 1RM, if written."
     )
     movements: list[WodMovement] = Field(min_length=1, max_length=30)
-    notes: str | None = Field(None, max_length=300)
+    notes: str | None = Field(
+        None,
+        max_length=300,
+        description="Only extra text from the input about this block. Usually null.",
+    )
 
 
 class Wod(_Schema):
@@ -142,11 +153,22 @@ class Wod(_Schema):
     result: str | None = Field(
         None, max_length=80, description="Score if stated: time, rounds+reps, load..."
     )
-    notes: str | None = Field(None, max_length=500)
+    notes: str | None = Field(
+        None,
+        max_length=500,
+        description=(
+            "Only extra text from the input about the whole workout (e.g. 'partner WOD'). "
+            "Usually null. Never explain your own choices here."
+        ),
+    )
     unreadable: list[str] = Field(
         default_factory=list,
         max_length=10,
-        description="Parts that could not be read with confidence.",
+        description=(
+            "Parts that ARE in the input but are illegible or ambiguous. Not for "
+            "information that is simply not given (e.g. a target height nobody wrote), "
+            "and never for explaining a choice such as which value of a pair was used."
+        ),
     )
     confidence: Confidence
 
@@ -214,7 +236,11 @@ class Activity(_Schema):
     rpe: int | None = Field(
         None, ge=1, le=10, description="Perceived effort 1-10, only if the athlete stated it."
     )
-    notes: str | None = Field(None, max_length=300)
+    notes: str | None = Field(
+        None,
+        max_length=300,
+        description="Only extra text the athlete wrote (e.g. 'muddy trail'). Usually null.",
+    )
     confidence: Confidence
 
     @property
