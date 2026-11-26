@@ -2,6 +2,7 @@
 
 import datetime as dt
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +12,8 @@ from kide.llm.client import LlmClient
 from kide.storage import make_engine, make_session_factory, upgrade_database
 from kide.storage.repositories import unit_of_work
 from tests.llm_fakes import FakeSdk, api_error, make_message
+
+EXAMPLE_PROFILE = Path(__file__).parent.parent / "profile.example.yaml"
 
 
 @pytest.fixture(autouse=True)
@@ -120,3 +123,46 @@ def test_check_prints_the_api_reason_on_failure(capsys, monkeypatch):
     assert cli.main(["llm", "check"]) == 1
     err = capsys.readouterr().err
     assert "FAIL chat + parsing: claude-opus-5-5 -> bad_request: Your credit balance" in err
+
+
+def test_parse_prints_summary_json_and_cost(capsys, monkeypatch, tmp_path):
+    from PIL import Image
+
+    from tests.llm_fakes import tool_message
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setenv("ANTHROPIC_MODEL", "claude-opus-5-5")
+    monkeypatch.setenv("ANTHROPIC_PARSE_MODEL", "claude-haiku-5-5")
+    monkeypatch.setenv("PROFILE_PATH", str(EXAMPLE_PROFILE))
+    wod = {
+        "format": "for_time",
+        "confidence": "high",
+        "blocks": [{"format": "for_time", "movements": [{"name": "Burpees", "reps": 50}]}],
+    }
+    sdk = FakeSdk(tool_message("record_wod", wod, model="claude-haiku-5-5", input_tokens=900))
+    original = LlmClient.from_settings
+
+    def fake_from_settings(settings, session_factory, user_id):
+        client = original(settings, session_factory, user_id)
+        client._sdk = sdk
+        return client
+
+    monkeypatch.setattr(LlmClient, "from_settings", staticmethod(fake_from_settings))
+    photo = tmp_path / "board.jpg"
+    Image.new("RGB", (100, 100)).save(photo)
+    code = cli.main(["parse", "wod", "--text", "50 burpees", "--photo", str(photo), "--json"])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "status: ok" in out
+    assert "• 50 Burpee" in out
+    assert '"movement_id": "burpee"' in out
+    assert "call 1: in 900" in out
+    assert sdk.requests[0]["messages"][0]["content"][0]["type"] == "image"
+
+
+def test_parse_rejects_missing_photos(capsys, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setenv("ANTHROPIC_MODEL", "claude-opus-5-5")
+    monkeypatch.setenv("PROFILE_PATH", str(EXAMPLE_PROFILE))
+    assert cli.main(["parse", "wod", "--photo", "nope.jpg"]) == 1
+    assert "file not found" in capsys.readouterr().err

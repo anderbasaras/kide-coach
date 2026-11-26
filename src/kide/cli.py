@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from kide.config import ConfigError, Settings, get_settings
 from kide.profile import ProfileError, load_profile
 from kide.storage.db import make_engine, make_session_factory, upgrade_database
+from kide.storage.models import LlmCall
 
 
 def _profile_check(args: argparse.Namespace) -> int:
@@ -138,6 +139,86 @@ def _llm_costs(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse(args: argparse.Namespace) -> int:
+    """Read a WOD or an activity with Claude and print the summary, JSON and cost."""
+    import json
+
+    from kide.bot.summaries import summarize_activity, summarize_wod
+    from kide.catalog.movements import default_movements
+    from kide.i18n import Translator
+    from kide.llm.client import LlmClient, LlmError
+    from kide.llm.parsing import AthleteInfo, Kind, Parser
+    from kide.llm.schemas import Wod
+    from kide.storage.repositories import unit_of_work
+
+    settings = get_settings()
+    try:
+        settings.require("anthropic_api_key", "anthropic_model")
+        profile = load_profile(settings.profile_path)
+    except (ConfigError, ProfileError) as exc:
+        print(f"kide parse: {exc}", file=sys.stderr)
+        return 1
+    photos = [str(Path(photo).resolve()) for photo in args.photo or []]
+    missing = [photo for photo in photos if not Path(photo).is_file()]
+    if missing:
+        print(f"kide parse: file not found: {', '.join(missing)}", file=sys.stderr)
+        return 1
+    factory = _session_factory(settings)
+    client = LlmClient.from_settings(settings, factory, user_id=None)
+    assert client is not None
+    catalog = default_movements()
+    parser = Parser(client, catalog, settings.data_dir)
+    language = profile.identity.language
+    athlete = AthleteInfo(sex=profile.body.sex, language=language)
+    try:
+        outcome = asyncio.run(
+            parser.parse(Kind(args.kind), text=args.text, photo_paths=photos, athlete=athlete)
+        )
+    except LlmError as exc:
+        detail = f": {exc.detail}" if exc.detail else ""
+        print(f"kide parse: {exc.kind.value}{detail}", file=sys.stderr)
+        return 1
+    with unit_of_work(factory) as repos:
+        calls = [repos.session.get(LlmCall, call_id) for call_id in outcome.call_ids]
+        cost = sum(float(call.estimated_cost_usd or 0) for call in calls if call)
+        tokens = [
+            (
+                c.input_tokens,
+                c.cache_creation_input_tokens,
+                c.cache_read_input_tokens,
+                c.output_tokens,
+            )
+            for c in calls
+            if c
+        ]
+    print(f"status: {outcome.status.value} · attempts: {outcome.attempts}")
+    if outcome.skipped_images:
+        print(f"skipped images: {outcome.skipped_images}")
+    if outcome.item is not None:
+        translator = Translator.from_directory(default_locale=language)
+
+        def t(key: str, **params: object) -> str:
+            return translator.t(key, locale=language, **params)
+
+        item = outcome.item
+        summary = (
+            summarize_wod(item, t, language, catalog)
+            if isinstance(item, Wod)
+            else summarize_activity(item, t)
+        )
+        print("\n" + summary + "\n")
+        if args.json:
+            print(
+                json.dumps(
+                    item.model_dump(mode="json", exclude_none=True), indent=2, ensure_ascii=False
+                )
+            )
+    for index, (fresh, written, read, out) in enumerate(tokens, start=1):
+        print(f"call {index}: in {fresh} · cache write {written} · cache read {read} · out {out}")
+    print(f"cost: ${cost:.6f}")
+    return 0 if outcome.ok else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="kide", description="Kide hybrid training coach.")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -168,6 +249,15 @@ def build_parser() -> argparse.ArgumentParser:
     costs = llm_commands.add_parser("costs", help="tokens and estimated cost per purpose")
     costs.add_argument("--days", type=int, help="only the last N days")
     costs.set_defaults(handler=_llm_costs)
+
+    parse = commands.add_parser(
+        "parse", help="read a WOD or an activity with Claude (testing: only the cost is recorded)"
+    )
+    parse.add_argument("kind", choices=["wod", "activity"])
+    parse.add_argument("--text", help="what you would write to the bot")
+    parse.add_argument("--photo", action="append", help="image file; repeat for several")
+    parse.add_argument("--json", action="store_true", help="also print the structured JSON")
+    parse.set_defaults(handler=_parse)
 
     return parser
 
