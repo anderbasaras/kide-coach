@@ -24,6 +24,10 @@ dependencies = [
     # JobQueue needs for the daily check-in, the reminder and conversation timeouts.
     "python-telegram-bot[job-queue]>=22.8,<23",
     "tzdata>=2025.1; sys_platform == 'win32'", # zoneinfo has no tz database on Windows
+    "anthropic>=2.14,<3", # official SDK (D-007): WOD/activity parsing and the coach chat
+    # Shrinks board photos sent as files below the API's 10 MB limit, caps their long
+    # edge (tokens and latency) and applies the EXIF orientation of phone photos.
+    "pillow>=13,<14",
 ]
 
 [project.urls]

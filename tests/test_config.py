@@ -10,6 +10,7 @@ ENV_VARS = (
     "ALLOWED_CHAT_IDS",
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_MODEL",
+    "ANTHROPIC_PARSE_MODEL",
     "DATA_DIR",
     "DATABASE_URL",
     "PROFILE_PATH",
@@ -72,6 +73,7 @@ def test_log_level_is_case_insensitive():
 
 def test_empty_model_is_none():
     assert make(ANTHROPIC_MODEL="").anthropic_model is None
+    assert make(ANTHROPIC_PARSE_MODEL="  ").anthropic_parse_model is None
 
 
 def test_secrets_are_masked():

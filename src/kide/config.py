@@ -36,7 +36,11 @@ class Settings(BaseSettings):
     # One instance serves one person (D-011); several chats may share that profile.
     allowed_chat_ids: Annotated[list[int], NoDecode] = Field(default_factory=list)
     anthropic_api_key: SecretStr | None = None
+    # Model for the coach chat and for writing messages (check names at docs.claude.com).
     anthropic_model: str | None = None
+    # Optional model for reading WODs and activities (text and photos); defaults to
+    # anthropic_model. A cheaper model can be enough here: measure it with `kide eval`.
+    anthropic_parse_model: str | None = None
     # User data (database, photos, exports) lives here, never in the repo (D-010).
     data_dir: Path = Path("var")
     # Defaults to a SQLite file inside data_dir when not set.
@@ -65,7 +69,7 @@ class Settings(BaseSettings):
     def _upper_log_level(cls, value: object) -> object:
         return value.strip().upper() if isinstance(value, str) else value
 
-    @field_validator("anthropic_model", mode="before")
+    @field_validator("anthropic_model", "anthropic_parse_model", mode="before")
     @classmethod
     def _empty_model_is_none(cls, value: object) -> object:
         return None if isinstance(value, str) and not value.strip() else value

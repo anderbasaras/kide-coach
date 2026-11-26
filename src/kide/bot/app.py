@@ -23,6 +23,7 @@ from kide.bot.scheduler import start_checkin_jobs
 from kide.bot.services import SERVICES_KEY, Services
 from kide.config import ConfigError, Settings, get_settings
 from kide.i18n import Translator
+from kide.llm.client import LlmClient
 from kide.logging_config import configure_logging
 from kide.profile import ProfileError, load_profile
 from kide.storage import make_engine, make_session_factory, upgrade_database
@@ -77,6 +78,14 @@ def prepare_services(settings: Settings) -> Services:
     with unit_of_work(session_factory) as repos:
         user = repos.users.get_or_create(profile.identity.name)
         user_id, chosen_language = user.id, user.language
+    llm = LlmClient.from_settings(settings, session_factory, user_id)
+    if llm is None:
+        logger.warning(
+            "ANTHROPIC_API_KEY or ANTHROPIC_MODEL is not set: WODs and activities are saved "
+            "without interpretation and the coach chat is off."
+        )
+    else:
+        logger.info("Claude models: chat %s, parsing %s", llm.chat_model, llm.parse_model)
     return Services(
         settings=settings,
         profile=profile,
@@ -84,6 +93,7 @@ def prepare_services(settings: Settings) -> Services:
         session_factory=session_factory,
         user_id=user_id,
         chosen_language=chosen_language,
+        llm=llm,
     )
 
 
@@ -120,8 +130,12 @@ def build_application(services: Services) -> Application:
 def run() -> None:
     """Start the bot and block until it is stopped (Ctrl+C)."""
     settings = load_settings()
-    token = settings.telegram_bot_token.get_secret_value() if settings.telegram_bot_token else ""
-    configure_logging(settings.log_level, secrets=[token])
+    secrets = [
+        secret.get_secret_value()
+        for secret in (settings.telegram_bot_token, settings.anthropic_api_key)
+        if secret is not None
+    ]
+    configure_logging(settings.log_level, secrets=secrets)
 
     services = prepare_services(settings)
     application = build_application(services)

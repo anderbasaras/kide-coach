@@ -17,6 +17,7 @@ from telegram.ext import ContextTypes
 
 from kide.config import Settings
 from kide.i18n import Translator
+from kide.llm.client import LlmClient
 from kide.profile import Profile
 
 SERVICES_KEY = "services"
@@ -36,6 +37,9 @@ class Services:
     # Language chosen with /language (stored in users.language), None = profile language.
     chosen_language: str | None = None
     clock: Callable[[], dt.datetime] = field(default=utc_now)
+    # None when ANTHROPIC_API_KEY or ANTHROPIC_MODEL is missing: the bot keeps working
+    # as in phase 2 (inputs saved, not interpreted; no coach chat).
+    llm: LlmClient | None = None
 
     @property
     def tz(self) -> ZoneInfo:

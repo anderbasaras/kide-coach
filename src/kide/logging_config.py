@@ -5,9 +5,12 @@ pinned to WARNING whatever ``LOG_LEVEL`` says, because:
 
 - httpx logs every request URL at INFO, and Telegram request URLs contain the bot token;
 - python-telegram-bot logs request and update payloads at DEBUG, which would include
-  the user's messages (principle 5: their texts and photos never go to the log).
+  the user's messages (principle 5: their texts and photos never go to the log);
+- the Anthropic SDK (and its HTTP client, httpx2) logs request options at DEBUG, which
+  include prompts and images (D-037: only ids, types and counters are logged).
 
-As a second line of defence, every formatted log line has the bot token redacted.
+As a second line of defence, every formatted log line has the secrets (bot token,
+API key) redacted.
 Network retries from python-telegram-bot are logged as one line, without the long
 traceback: they are expected when the connection drops and say nothing about Kide.
 """
@@ -20,7 +23,7 @@ from collections.abc import Iterable
 LOG_FORMAT = "%(asctime)s %(levelname)-8s %(name)s: %(message)s"
 REDACTED = "<redacted>"
 
-PINNED_LOGGERS = ("httpx", "httpcore", "telegram", "apscheduler")
+PINNED_LOGGERS = ("httpx", "httpcore", "httpx2", "anthropic", "telegram", "apscheduler")
 _HANDLER_NAME = "kide"
 
 

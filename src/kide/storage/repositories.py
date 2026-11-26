@@ -16,11 +16,19 @@ import datetime as dt
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from kide.storage.models import DailyCheckin, DayType, SessionPhoto, TrainingSession, User
+from kide.storage.models import (
+    DailyCheckin,
+    DayType,
+    LlmCall,
+    SessionPhoto,
+    TrainingSession,
+    User,
+)
 
 TEXT_SEPARATOR = "\n\n"
 
@@ -184,6 +192,110 @@ class SessionRepository:
 
 
 @dataclass(frozen=True)
+class LlmUsageSummary:
+    """Calls of one purpose and model, for ``kide llm costs``."""
+
+    purpose: str
+    model: str
+    calls: int
+    failed: int
+    input_tokens: int
+    output_tokens: int
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int
+    cost_usd: Decimal | None
+    mean_latency_ms: float | None
+
+    @property
+    def mean_cost_usd(self) -> Decimal | None:
+        succeeded = self.calls - self.failed
+        if self.cost_usd is None or succeeded <= 0:
+            return None
+        return self.cost_usd / succeeded
+
+
+class LlmCallRepository:
+    """One row per Anthropic API call: tokens and cost, never the content (D-037)."""
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def record(
+        self,
+        *,
+        user_id: int | None,
+        session_id: int | None,
+        purpose: str,
+        model: str,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        cache_creation_input_tokens: int = 0,
+        cache_read_input_tokens: int = 0,
+        estimated_cost_usd: Decimal | None = None,
+        latency_ms: int | None = None,
+        error: str | None = None,
+    ) -> LlmCall:
+        call = LlmCall(
+            user_id=user_id,
+            session_id=session_id,
+            purpose=purpose,
+            model=model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_creation_input_tokens=cache_creation_input_tokens,
+            cache_read_input_tokens=cache_read_input_tokens,
+            estimated_cost_usd=estimated_cost_usd,
+            latency_ms=latency_ms,
+            success=error is None,
+            error=error,
+        )
+        self._session.add(call)
+        self._session.flush()
+        return call
+
+    def for_session(self, session_id: int) -> list[LlmCall]:
+        return list(
+            self._session.scalars(
+                select(LlmCall).where(LlmCall.session_id == session_id).order_by(LlmCall.id)
+            )
+        )
+
+    def summary(self, since: dt.datetime | None = None) -> list[LlmUsageSummary]:
+        """Totals per purpose and model, optionally only for calls made since ``since``."""
+        failed = func.sum(case((LlmCall.success, 0), else_=1))
+        query = select(
+            LlmCall.purpose,
+            LlmCall.model,
+            func.count(LlmCall.id),
+            failed,
+            func.sum(LlmCall.input_tokens),
+            func.sum(LlmCall.output_tokens),
+            func.sum(LlmCall.cache_creation_input_tokens),
+            func.sum(LlmCall.cache_read_input_tokens),
+            func.sum(LlmCall.estimated_cost_usd),
+            func.avg(LlmCall.latency_ms),
+        ).group_by(LlmCall.purpose, LlmCall.model)
+        if since is not None:
+            query = query.where(LlmCall.created_at >= since)
+        rows = self._session.execute(query.order_by(LlmCall.purpose, LlmCall.model)).all()
+        return [
+            LlmUsageSummary(
+                purpose=row[0],
+                model=row[1],
+                calls=int(row[2]),
+                failed=int(row[3] or 0),
+                input_tokens=int(row[4] or 0),
+                output_tokens=int(row[5] or 0),
+                cache_creation_input_tokens=int(row[6] or 0),
+                cache_read_input_tokens=int(row[7] or 0),
+                cost_usd=Decimal(str(row[8])) if row[8] is not None else None,
+                mean_latency_ms=float(row[9]) if row[9] is not None else None,
+            )
+            for row in rows
+        ]
+
+
+@dataclass(frozen=True)
 class Repositories:
     session: Session
 
@@ -198,6 +310,10 @@ class Repositories:
     @property
     def sessions(self) -> SessionRepository:
         return SessionRepository(self.session)
+
+    @property
+    def llm_calls(self) -> LlmCallRepository:
+        return LlmCallRepository(self.session)
 
 
 @contextmanager
