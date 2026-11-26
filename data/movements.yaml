@@ -1,0 +1,497 @@
+# Movement catalog for box WODs and hybrid races.
+#
+# Used to normalise what is written on a whiteboard ("T2B", "C&J", "zancadas con saco")
+# to one movement id. Phase 4 adds muscle groups, pattern and type to each entry.
+#
+# Fields:
+#   id        snake_case, stable: stored in parsed WODs. Never rename; add an alias instead.
+#   names     display name per bot language (same languages as the i18n locales).
+#   category  barbell | dumbbell | kettlebell | gymnastics | bodyweight | monostructural
+#             | odd_object
+#   unit      how the work is usually counted: reps | cal | m | s
+#   aliases   board spellings and abbreviations, in any language. Matching ignores case,
+#             accents, punctuation and a trailing plural "s". An alias must point to one
+#             movement only: leave out ambiguous ones (e.g. a bare "sentadilla").
+#
+# Names are descriptive and brand-free (principle 6). Aliases may include the trade names
+# people write on boards (e.g. "skierg") so they can be recognised.
+schema_version: 1
+movements:
+  # --- Barbell -------------------------------------------------------------------------
+  - id: back_squat
+    names: {en: Back squat, es: Sentadilla trasera}
+    category: barbell
+    unit: reps
+    aliases: [bs, back squat, sentadilla trasera, sentadilla con barra]
+  - id: front_squat
+    names: {en: Front squat, es: Sentadilla frontal}
+    category: barbell
+    unit: reps
+    aliases: [fs, front squat, sentadilla frontal]
+  - id: overhead_squat
+    names: {en: Overhead squat, es: Sentadilla overhead}
+    category: barbell
+    unit: reps
+    aliases: [ohs, overhead squat, sentadilla por encima de la cabeza]
+  - id: deadlift
+    names: {en: Deadlift, es: Peso muerto}
+    category: barbell
+    unit: reps
+    aliases: [dl, deadlift, peso muerto, pm]
+  - id: romanian_deadlift
+    names: {en: Romanian deadlift, es: Peso muerto rumano}
+    category: barbell
+    unit: reps
+    aliases: [rdl, romanian deadlift, peso muerto rumano]
+  - id: sumo_deadlift_high_pull
+    names: {en: Sumo deadlift high pull, es: Sumo deadlift high pull}
+    category: barbell
+    unit: reps
+    aliases: [sdhp, sumo deadlift high pull, sdlhp]
+  - id: bench_press
+    names: {en: Bench press, es: Press de banca}
+    category: barbell
+    unit: reps
+    aliases: [bp, bench, bench press, press banca, press de banca]
+  - id: strict_press
+    names: {en: Strict press, es: Press estricto}
+    category: barbell
+    unit: reps
+    aliases: [sp, strict press, shoulder press, press militar, press estricto, overhead press]
+  - id: push_press
+    names: {en: Push press, es: Push press}
+    category: barbell
+    unit: reps
+    aliases: [pp, push press]
+  - id: push_jerk
+    names: {en: Push jerk, es: Push jerk}
+    category: barbell
+    unit: reps
+    aliases: [pj, push jerk]
+  - id: split_jerk
+    names: {en: Split jerk, es: Split jerk}
+    category: barbell
+    unit: reps
+    aliases: [split jerk, jerk en tijera]
+  - id: power_clean
+    names: {en: Power clean, es: Cargada de potencia}
+    category: barbell
+    unit: reps
+    aliases: [pc, power clean, cargada de potencia, cargada power]
+  - id: squat_clean
+    names: {en: Squat clean, es: Cargada con sentadilla}
+    category: barbell
+    unit: reps
+    aliases: [sc, squat clean, clean, full clean, cargada, cargada completa]
+  - id: hang_power_clean
+    names: {en: Hang power clean, es: Cargada colgada de potencia}
+    category: barbell
+    unit: reps
+    aliases: [hpc, hang power clean, cargada colgada]
+  - id: hang_squat_clean
+    names: {en: Hang squat clean, es: Cargada colgada con sentadilla}
+    category: barbell
+    unit: reps
+    aliases: [hsc, hang squat clean]
+  - id: clean_and_jerk
+    names: {en: Clean and jerk, es: Dos tiempos}
+    category: barbell
+    unit: reps
+    aliases: [c&j, cj, c+j, clean and jerk, clean & jerk, dos tiempos]
+  - id: power_snatch
+    names: {en: Power snatch, es: Arrancada de potencia}
+    category: barbell
+    unit: reps
+    aliases: [ps, power snatch, arrancada de potencia, arrancada power]
+  - id: squat_snatch
+    names: {en: Squat snatch, es: Arrancada con sentadilla}
+    category: barbell
+    unit: reps
+    aliases: [ss, squat snatch, snatch, full snatch, arrancada, arrancada completa]
+  - id: hang_power_snatch
+    names: {en: Hang power snatch, es: Arrancada colgada de potencia}
+    category: barbell
+    unit: reps
+    aliases: [hps, hang power snatch, arrancada colgada]
+  - id: thruster
+    names: {en: Thruster, es: Thruster}
+    category: barbell
+    unit: reps
+    aliases: [thruster, thrusters, th, barbell thruster]
+  - id: barbell_row
+    names: {en: Barbell row, es: Remo con barra}
+    category: barbell
+    unit: reps
+    aliases: [barbell row, bent over row, pendlay row, remo con barra]
+  - id: good_morning
+    names: {en: Good morning, es: Buenos días}
+    category: barbell
+    unit: reps
+    aliases: [gm, good morning, buenos dias]
+  - id: barbell_lunge
+    names: {en: Barbell lunge, es: Zancada con barra}
+    category: barbell
+    unit: reps
+    aliases: [barbell lunge, front rack lunge, back rack lunge, zancada con barra]
+
+  # --- Dumbbell ------------------------------------------------------------------------
+  - id: dumbbell_snatch
+    names: {en: Dumbbell snatch, es: Arrancada con mancuerna}
+    category: dumbbell
+    unit: reps
+    aliases: [db snatch, dumbbell snatch, arrancada con mancuerna, arrancada mancuerna]
+  - id: dumbbell_clean_and_jerk
+    names: {en: Dumbbell clean and jerk, es: Dos tiempos con mancuerna}
+    category: dumbbell
+    unit: reps
+    aliases: [db clean and jerk, db c&j, dumbbell clean and jerk, db hang clean and jerk]
+  - id: dumbbell_clean
+    names: {en: Dumbbell clean, es: Cargada con mancuerna}
+    category: dumbbell
+    unit: reps
+    aliases: [db clean, dumbbell clean, db hang clean, cargada con mancuerna]
+  - id: dumbbell_thruster
+    names: {en: Dumbbell thruster, es: Thruster con mancuernas}
+    category: dumbbell
+    unit: reps
+    aliases: [db thruster, dumbbell thruster, thruster con mancuerna]
+  - id: dumbbell_push_press
+    names: {en: Dumbbell push press, es: Push press con mancuernas}
+    category: dumbbell
+    unit: reps
+    aliases: [db push press, dumbbell push press, db pp]
+  - id: dumbbell_front_squat
+    names: {en: Dumbbell front squat, es: Sentadilla frontal con mancuernas}
+    category: dumbbell
+    unit: reps
+    aliases: [db front squat, dumbbell front squat, db squat]
+  - id: dumbbell_lunge
+    names: {en: Dumbbell lunge, es: Zancada con mancuernas}
+    category: dumbbell
+    unit: reps
+    aliases: [db lunge, dumbbell lunge, db walking lunge, zancada con mancuerna]
+  - id: dumbbell_box_step_over
+    names: {en: Dumbbell box step-over, es: Step-over al cajón con mancuernas}
+    category: dumbbell
+    unit: reps
+    aliases: [db box step over, db step over, dumbbell box step over, db bso]
+  - id: devil_press
+    names: {en: Devil press, es: Devil press}
+    category: dumbbell
+    unit: reps
+    aliases: [devil press, devils press]
+  - id: dumbbell_row
+    names: {en: Dumbbell row, es: Remo con mancuerna}
+    category: dumbbell
+    unit: reps
+    aliases: [db row, dumbbell row, remo con mancuerna, renegade row]
+
+  # --- Kettlebell ----------------------------------------------------------------------
+  - id: kettlebell_swing
+    names: {en: Kettlebell swing, es: Swing con kettlebell}
+    category: kettlebell
+    unit: reps
+    aliases: [kbs, kb swing, kettlebell swing, american swing, russian swing, swing, swing ruso, swing americano]
+  - id: goblet_squat
+    names: {en: Goblet squat, es: Sentadilla goblet}
+    category: kettlebell
+    unit: reps
+    aliases: [goblet squat, kb goblet squat, sentadilla goblet]
+  - id: kettlebell_snatch
+    names: {en: Kettlebell snatch, es: Arrancada con kettlebell}
+    category: kettlebell
+    unit: reps
+    aliases: [kb snatch, kettlebell snatch]
+  - id: kettlebell_clean
+    names: {en: Kettlebell clean, es: Cargada con kettlebell}
+    category: kettlebell
+    unit: reps
+    aliases: [kb clean, kettlebell clean]
+  - id: kettlebell_deadlift
+    names: {en: Kettlebell deadlift, es: Peso muerto con kettlebell}
+    category: kettlebell
+    unit: reps
+    aliases: [kb deadlift, kettlebell deadlift, kb dl]
+  - id: turkish_get_up
+    names: {en: Turkish get-up, es: Levantamiento turco}
+    category: kettlebell
+    unit: reps
+    aliases: [tgu, turkish get up, levantamiento turco]
+
+  # --- Gymnastics ----------------------------------------------------------------------
+  - id: pull_up
+    names: {en: Pull-up, es: Dominada}
+    category: gymnastics
+    unit: reps
+    aliases: [pu, pull up, kipping pull up, butterfly pull up, dominada, dominadas]
+  - id: strict_pull_up
+    names: {en: Strict pull-up, es: Dominada estricta}
+    category: gymnastics
+    unit: reps
+    aliases: [strict pull up, spu, dominada estricta]
+  - id: chest_to_bar
+    names: {en: Chest-to-bar pull-up, es: Dominada pecho a barra}
+    category: gymnastics
+    unit: reps
+    aliases: [c2b, ctb, chest to bar, chest to bar pull up, pecho a barra]
+  - id: bar_muscle_up
+    names: {en: Bar muscle-up, es: Muscle-up en barra}
+    category: gymnastics
+    unit: reps
+    aliases: [bmu, bar muscle up, muscle up en barra]
+  - id: ring_muscle_up
+    names: {en: Ring muscle-up, es: Muscle-up en anillas}
+    category: gymnastics
+    unit: reps
+    aliases: [rmu, ring muscle up, mu, muscle up, muscle up en anillas]
+  - id: toes_to_bar
+    names: {en: Toes-to-bar, es: Pies a barra}
+    category: gymnastics
+    unit: reps
+    aliases: [t2b, ttb, toes to bar, pies a barra]
+  - id: knees_to_elbows
+    names: {en: Knees-to-elbows, es: Rodillas a codos}
+    category: gymnastics
+    unit: reps
+    aliases: [k2e, kte, knees to elbows, rodillas a codos]
+  - id: hanging_knee_raise
+    names: {en: Hanging knee raise, es: Elevación de rodillas colgado}
+    category: gymnastics
+    unit: reps
+    aliases: [hkr, hanging knee raise, knee raise, elevacion de rodillas]
+  - id: handstand_push_up
+    names: {en: Handstand push-up, es: Flexión en pino}
+    category: gymnastics
+    unit: reps
+    aliases: [hspu, handstand push up, kipping hspu, strict hspu, flexion en pino, flexiones en pino]
+  - id: handstand_walk
+    names: {en: Handstand walk, es: Caminar en pino}
+    category: gymnastics
+    unit: m
+    aliases: [hsw, handstand walk, caminar en pino, pino caminando]
+  - id: wall_walk
+    names: {en: Wall walk, es: Wall walk}
+    category: gymnastics
+    unit: reps
+    aliases: [wall walk, ww]
+  - id: ring_dip
+    names: {en: Ring dip, es: Fondo en anillas}
+    category: gymnastics
+    unit: reps
+    aliases: [ring dip, fondos en anillas, fondo en anillas]
+  - id: bar_dip
+    names: {en: Dip, es: Fondo en paralelas}
+    category: gymnastics
+    unit: reps
+    aliases: [dip, bar dip, fondos, fondo en paralelas]
+  - id: rope_climb
+    names: {en: Rope climb, es: Subida a la cuerda}
+    category: gymnastics
+    unit: reps
+    aliases: [rc, rope climb, legless rope climb, subida a la cuerda, cuerda, trepa]
+  - id: ring_row
+    names: {en: Ring row, es: Remo en anillas}
+    category: gymnastics
+    unit: reps
+    aliases: [ring row, remo en anillas, remo invertido]
+  - id: ghd_sit_up
+    names: {en: GHD sit-up, es: Abdominal en GHD}
+    category: gymnastics
+    unit: reps
+    aliases: [ghd, ghd sit up, ghd situp]
+  - id: l_sit
+    names: {en: L-sit, es: L-sit}
+    category: gymnastics
+    unit: s
+    aliases: [l sit, lsit]
+
+  # --- Bodyweight ----------------------------------------------------------------------
+  - id: air_squat
+    names: {en: Air squat, es: Sentadilla sin peso}
+    category: bodyweight
+    unit: reps
+    aliases: [as, air squat, bodyweight squat, sentadilla sin peso, sentadilla al aire]
+  - id: pistol_squat
+    names: {en: Pistol squat, es: Sentadilla a una pierna}
+    category: bodyweight
+    unit: reps
+    aliases: [pistol, pistol squat, sentadilla pistol, sentadilla a una pierna]
+  - id: walking_lunge
+    names: {en: Walking lunge, es: Zancada}
+    category: bodyweight
+    unit: reps
+    aliases: [lunge, walking lunge, zancada, zancadas, zancada caminando]
+  - id: jumping_lunge
+    names: {en: Jumping lunge, es: Zancada con salto}
+    category: bodyweight
+    unit: reps
+    aliases: [jumping lunge, zancada con salto, zancadas saltando]
+  - id: push_up
+    names: {en: Push-up, es: Flexión}
+    category: bodyweight
+    unit: reps
+    aliases: [push up, pushup, flexion, flexiones]
+  - id: hand_release_push_up
+    names: {en: Hand-release push-up, es: Flexión con despegue de manos}
+    category: bodyweight
+    unit: reps
+    aliases: [hrpu, hand release push up, hr push up]
+  - id: sit_up
+    names: {en: Sit-up, es: Abdominal}
+    category: bodyweight
+    unit: reps
+    aliases: [sit up, situp, abmat sit up, abdominal, abdominales]
+  - id: v_up
+    names: {en: V-up, es: V-up}
+    category: bodyweight
+    unit: reps
+    aliases: [v up, vup, abdominal en v]
+  - id: hollow_hold
+    names: {en: Hollow hold, es: Hollow hold}
+    category: bodyweight
+    unit: s
+    aliases: [hollow, hollow hold, hollow rock]
+  - id: plank
+    names: {en: Plank, es: Plancha}
+    category: bodyweight
+    unit: s
+    aliases: [plank, plancha]
+  - id: burpee
+    names: {en: Burpee, es: Burpee}
+    category: bodyweight
+    unit: reps
+    aliases: [burpee, bp burpee]
+  - id: bar_facing_burpee
+    names: {en: Bar-facing burpee, es: Burpee sobre la barra}
+    category: bodyweight
+    unit: reps
+    aliases: [bfb, bar facing burpee, burpee over bar, burpee sobre barra]
+  - id: burpee_box_jump_over
+    names: {en: Burpee box jump-over, es: Burpee con salto al cajón}
+    category: bodyweight
+    unit: reps
+    aliases: [bbjo, burpee box jump over, burpee box jump, burpee al cajon]
+  - id: burpee_broad_jump
+    names: {en: Burpee broad jump, es: Burpee con salto horizontal}
+    category: bodyweight
+    unit: m
+    aliases: [bbj, burpee broad jump, burpee salto largo, burpee con salto horizontal]
+  - id: box_jump
+    names: {en: Box jump, es: Salto al cajón}
+    category: bodyweight
+    unit: reps
+    aliases: [bj, box jump, salto al cajon, saltos al cajon]
+  - id: box_jump_over
+    names: {en: Box jump-over, es: Salto por encima del cajón}
+    category: bodyweight
+    unit: reps
+    aliases: [bjo, box jump over, box over]
+  - id: box_step_up
+    names: {en: Box step-up, es: Subida al cajón}
+    category: bodyweight
+    unit: reps
+    aliases: [step up, box step up, step over, subida al cajon]
+  - id: broad_jump
+    names: {en: Broad jump, es: Salto horizontal}
+    category: bodyweight
+    unit: reps
+    aliases: [broad jump, salto horizontal, salto de longitud]
+  - id: double_under
+    names: {en: Double-under, es: Doble comba}
+    category: bodyweight
+    unit: reps
+    aliases: [du, dus, double under, dobles, doble comba, comba doble]
+  - id: single_under
+    names: {en: Single-under, es: Comba simple}
+    category: bodyweight
+    unit: reps
+    aliases: [su, sus, single under, simples, comba simple, comba]
+
+  # --- Monostructural (cardio) ---------------------------------------------------------
+  - id: run
+    names: {en: Run, es: Carrera}
+    category: monostructural
+    unit: m
+    aliases: [run, running, carrera, correr]
+  - id: shuttle_run
+    names: {en: Shuttle run, es: Carrera de ida y vuelta}
+    category: monostructural
+    unit: m
+    aliases: [shuttle run, shuttle, ida y vuelta]
+  - id: row
+    names: {en: Row (ergometer), es: Remo (ergómetro)}
+    category: monostructural
+    unit: cal
+    aliases: [row, rowing, rower, c2 row, remo, remo ergometro]
+  - id: ski
+    names: {en: Ski (ergometer), es: Esquí (ergómetro)}
+    category: monostructural
+    unit: cal
+    aliases: [ski, ski erg, skierg, esqui, ski ergometro]
+  - id: air_bike
+    names: {en: Air bike, es: Bici de aire}
+    category: monostructural
+    unit: cal
+    aliases: [air bike, assault bike, echo bike, ab, airdyne, bici de aire, assault]
+  - id: bike_erg
+    names: {en: Bike (ergometer), es: Bici (ergómetro)}
+    category: monostructural
+    unit: cal
+    aliases: [bike erg, bikeerg, c2 bike, bici erg, bici ergometro]
+  - id: swim
+    names: {en: Swim, es: Natación}
+    category: monostructural
+    unit: m
+    aliases: [swim, swimming, nadar, natacion]
+
+  # --- Odd objects and hybrid-race stations -----------------------------------------------
+  - id: wall_ball
+    names: {en: Wall ball, es: Wall ball}
+    category: odd_object
+    unit: reps
+    aliases: [wb, wbs, wall ball, wall ball shot, wallball, wall balls]
+  - id: sled_push
+    names: {en: Sled push, es: Empuje de trineo}
+    category: odd_object
+    unit: m
+    aliases: [sled push, push sled, empuje de trineo, trineo empuje]
+  - id: sled_pull
+    names: {en: Sled pull, es: Arrastre de trineo}
+    category: odd_object
+    unit: m
+    aliases: [sled pull, sled drag, arrastre de trineo, tiron de trineo, trineo arrastre]
+  - id: farmers_carry
+    names: {en: Farmer's carry, es: Paseo del granjero}
+    category: odd_object
+    unit: m
+    aliases: [farmers carry, farmer carry, farmers walk, farmer walk, paseo del granjero, paseo granjero]
+  - id: sandbag_lunge
+    names: {en: Sandbag lunge, es: Zancada con saco}
+    category: odd_object
+    unit: m
+    aliases: [sandbag lunge, sb lunge, zancada con saco, zancadas con saco, zancadas con sandbag]
+  - id: sandbag_clean
+    names: {en: Sandbag clean, es: Cargada con saco}
+    category: odd_object
+    unit: reps
+    aliases: [sandbag clean, sb clean, cargada con saco, sandbag to shoulder, saco al hombro]
+  - id: sandbag_carry
+    names: {en: Sandbag carry, es: Transporte de saco}
+    category: odd_object
+    unit: m
+    aliases: [sandbag carry, bear hug carry, sb carry, transporte de saco]
+  - id: ball_slam
+    names: {en: Ball slam, es: Lanzamiento de balón al suelo}
+    category: odd_object
+    unit: reps
+    aliases: [slam ball, ball slam, slams, slam]
+  - id: med_ball_clean
+    names: {en: Medicine ball clean, es: Cargada con balón medicinal}
+    category: odd_object
+    unit: reps
+    aliases: [med ball clean, medicine ball clean, mb clean]
+  - id: plate_overhead_lunge
+    names: {en: Plate overhead lunge, es: Zancada con disco sobre la cabeza}
+    category: odd_object
+    unit: reps
+    aliases: [plate overhead lunge, overhead plate lunge, oh plate lunge, oh lunge]
