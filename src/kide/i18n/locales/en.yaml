@@ -101,6 +101,7 @@ day:
 
 formats:
   date: "%Y-%m-%d"
+  decimal_separator: "."
 
 fallback:
   edited: I don't process edited messages. Send the change as a new message.
@@ -119,3 +120,60 @@ safety:
   medical_disclaimer: >-
     Kide is not medical advice. If you feel acute pain, chest pain or dizziness,
     stop training and see a doctor.
+
+parsed:
+  # What Claude read, shown back to the user before saving.
+  wod_formats:
+    amrap: AMRAP
+    emom: EMOM
+    for_time: For time
+    rounds: Rounds
+    intervals: Intervals
+    strength: Strength
+    mixed: Mixed
+    other: Other
+  scaling:
+    rx: Rx
+    scaled: Scaled
+    foundations: Foundations
+  activity_types:
+    run: Run
+    walk: Walk
+    hike: Hike
+    bike: Bike
+    row: Row
+    swim: Swim
+    other: Activity
+  wod_header: "WOD · {format}"
+  wod_header_titled: "{title} · {format}"
+  block_label: "{label})"
+  warmup: Warm-up
+  minutes: "{value} min"
+  every: "every {value} min"
+  time_cap: "cap {value} min"
+  rounds: "{value} rounds"
+  sets: "{value} sets"
+  interval: "{work} s on / {rest} s off"
+  pct_1rm: "@ {value}% 1RM"
+  movement_line: "• {text}"
+  unknown_movement: "{name} (?)"
+  reps: "{value}"
+  sets_reps: "{sets}×{reps}"
+  distance_m: "{value} m"
+  calories: "{value} cal"
+  seconds: "{value} s"
+  load_kg: "{value} kg"
+  load_implements: "{count}×{value} kg"
+  height_cm: "{value} cm"
+  level: "Level: {value}"
+  result: "Result: {value}"
+  notes: "Notes: {value}"
+  unreadable: "Couldn't read: {value}"
+  low_confidence: "⚠️ I'm not sure about this reading: please check it."
+  distance_km: "{value} km"
+  duration_hm: "{hours} h {minutes} min"
+  duration_unknown: "duration ?"
+  pace: "{value} /km"
+  elevation: "+{value} m"
+  heart_rate: "HR {value} bpm"
+  rpe: "RPE {value}/10"
