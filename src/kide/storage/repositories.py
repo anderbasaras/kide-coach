@@ -135,6 +135,20 @@ class SessionRepository:
             )
         )
 
+    def between(self, user_id: int, start: dt.date, end: dt.date) -> list[TrainingSession]:
+        """Sessions from ``start`` to ``end`` (both included), oldest first."""
+        return list(
+            self._session.scalars(
+                select(TrainingSession)
+                .where(
+                    TrainingSession.user_id == user_id,
+                    TrainingSession.date >= start,
+                    TrainingSession.date <= end,
+                )
+                .order_by(TrainingSession.date, TrainingSession.id)
+            )
+        )
+
     def append_text(self, training: TrainingSession, text: str) -> None:
         """Add a message to ``raw_input`` (several WOD messages end up in one text)."""
         text = text.strip()

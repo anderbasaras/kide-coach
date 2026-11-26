@@ -56,6 +56,8 @@ def help_text(services: Services) -> str:
         for command in MENU_COMMANDS
     ]
     lines += ["", services.t("help.footer", time=f"{services.profile.schedule.checkin_time:%H:%M}")]
+    if services.llm is not None:
+        lines.append(services.t("help.chat"))
     return "\n".join(lines)
 
 

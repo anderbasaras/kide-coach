@@ -264,7 +264,7 @@ async def test_correcting_while_a_flow_is_still_open(app, api):
         (voice_update, "No puedo usar ese tipo de mensaje"),
         (lambda: document_update(mime_type="application/pdf"), "No puedo usar ese tipo"),
         (edited_update, "No proceso mensajes editados"),
-        (lambda: message_update(text="hola, ¿qué tal?"), "Todavía no sé conversar"),
+        (lambda: message_update(text="hola, ¿qué tal?"), "El chat con el entrenador necesita"),
         (lambda: message_update(text="/foo"), "No conozco ese comando. Escribe /ayuda"),
         (lambda: photo_update("LOOSE"), "elige primero la sesión con /hoy"),
     ],

@@ -28,6 +28,9 @@ help:
   intro: "I'm Kide, your hybrid training coach. These are my commands:"
   command: "/{name} · {description}"
   footer: "Every day at {time} I'll ask you what's on today."
+  chat: >-
+    You can also write me any question, about training or anything else: I'll answer as
+    your coach, knowing your last 7 days. Not medical advice.
 
 language:
   prompt: "Choose a language:"
@@ -107,8 +110,8 @@ fallback:
   edited: I don't process edited messages. Send the change as a new message.
   photo: "To save a photo, first choose the session with /{today} (or “Add session”)."
   text: >-
-    I can't chat yet: that arrives soon. For now, send /{today} to log your day
-    or /{help} to see what I can do.
+    The coach chat needs Claude, which is not configured on this Kide (ANTHROPIC_API_KEY).
+    Send /{today} to log your day or /{help} to see what I can do.
   unknown_command: "I don't know that command. Send /{help} to see mine."
   unsupported: "I can't use that kind of message. Send /{today} to log your day or /{help} for help."
 
@@ -208,3 +211,11 @@ review:
   gone: That reading no longer exists. Use /{today} to see your day.
   already_confirmed: "Already saved:"
   unsupported: "Write the change as text, or tap «Save without reading»."
+
+chat:
+  # The free chat with the coach.
+  error: "I can't reach the coach right now. Try again in a moment."
+  error_config: >-
+    Claude rejected the request (API key, credit or model). The person running Kide
+    should check `kide llm check`.
+  empty: "I have no answer for that. Could you rephrase it?"

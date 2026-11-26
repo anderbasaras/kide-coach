@@ -27,6 +27,9 @@ help:
   intro: "Soy Kide, tu entrenador híbrido. Estos son mis comandos:"
   command: "/{name} · {description}"
   footer: "Cada día a las {time} te preguntaré qué toca hoy."
+  chat: >-
+    También puedes escribirme cualquier pregunta, de entrenamiento o de lo que sea: te
+    respondo como entrenador, teniendo en cuenta tus últimos 7 días. No es consejo médico.
 
 language:
   prompt: "Elige un idioma:"
@@ -106,8 +109,8 @@ fallback:
   edited: No proceso mensajes editados. Manda el cambio en un mensaje nuevo.
   photo: "Para guardar una foto, elige primero la sesión con /{today} (o «Añadir sesión»)."
   text: >-
-    Todavía no sé conversar: llegará pronto. De momento, escribe /{today} para
-    apuntar tu día o /{help} para ver qué puedo hacer.
+    El chat con el entrenador necesita Claude, que no está configurado en este Kide
+    (ANTHROPIC_API_KEY). Escribe /{today} para apuntar tu día o /{help} para ver qué puedo hacer.
   unknown_command: "No conozco ese comando. Escribe /{help} para ver los míos."
   unsupported: "No puedo usar ese tipo de mensaje. Escribe /{today} para apuntar tu día o /{help} para ver la ayuda."
 
@@ -207,3 +210,11 @@ review:
   gone: Esa lectura ya no existe. Escribe /{today} para ver tu día.
   already_confirmed: "Ya estaba guardado:"
   unsupported: "Escribe el cambio como texto, o pulsa «Guardar sin leer»."
+
+chat:
+  # El chat libre con el entrenador.
+  error: "Ahora mismo no puedo contactar con el entrenador. Prueba otra vez en un momento."
+  error_config: >-
+    Claude ha rechazado la petición (clave de la API, crédito o modelo). Quien gestiona
+    Kide debe revisar `kide llm check`.
+  empty: "No tengo respuesta para eso. ¿Puedes decirlo de otra forma?"
